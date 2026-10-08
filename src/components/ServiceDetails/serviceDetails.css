@@ -1,0 +1,38 @@
+.service-details-container { max-width: var(--maxw); margin: 0 auto; padding: clamp(36px, 5vw, 64px) var(--gutter) 80px; }
+.service-details-header { margin-bottom: clamp(20px, 3vw, 32px); animation: fade-in-up .5s .15s both; }
+.services-heading { font-size: clamp(1.5rem, 4vw, 2.2rem); letter-spacing: -.035em; font-weight: 750; }
+.description { color: var(--ink-soft); margin-top: 4px; }
+.description span { color: var(--teal-dark); font-weight: 700; }
+.no-services { text-align: center; padding: 48px 16px; color: var(--ink-soft); background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); }
+
+/* 3 columns desktop -> 2 tablet -> 1 phone, automatically */
+.services-list { display: grid; gap: clamp(16px, 2vw, 24px); grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.service-item { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(18px, 2.5vw, 24px); box-shadow: 0 6px 20px rgba(20,33,61,.035); animation: fade-in-up .5s both; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.service-item:nth-child(2) { animation-delay: .05s; }
+.service-item:nth-child(3) { animation-delay: .1s; }
+.service-item:nth-child(4) { animation-delay: .15s; }
+.service-item:hover { transform: translateY(-5px); border-color: #c8dedb; box-shadow: 0 18px 38px rgba(20,33,61,.1); }
+.provider-avatar { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; border: 3px solid var(--teal-tint); box-shadow: 0 3px 10px rgba(20,33,61,.1); }
+.service-info { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.category-tag { align-self: flex-start; background: var(--teal-tint); color: var(--teal-dark); font-size: .8rem; font-weight: 650; padding: 4px 11px; border-radius: 999px; }
+.service-title { font-size: clamp(1.05rem, 2.4vw, 1.2rem); line-height: 1.35; letter-spacing: -.015em; overflow-wrap: anywhere; }
+.provider-name { font-weight: 600; font-size: .95rem; }
+.provider-name .verified-badge { color: var(--teal); font-size: .8rem; font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.service-description { color: var(--ink-soft); font-size: .92rem; }
+.service-area { font-size: .88rem; }
+.service-meta { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+.price { font-weight: 700; color: var(--coral); }
+.rating { font-size: .9rem; color: var(--ink-soft); }
+
+/* Phones: avatar sits beside the text on wider phones, stacked on tiny ones */
+@media (min-width: 420px) and (max-width: 640px) {
+  .service-item { flex-direction: row; align-items: flex-start; }
+}
+@media (max-width: 419px) {
+  .service-meta { flex-direction: column; }
+  .service-details-container { padding-bottom: 48px; }
+}
+/* Large desktops */
+@media (min-width: 1400px) {
+  .services-list { grid-template-columns: repeat(3, 1fr); }
+}
