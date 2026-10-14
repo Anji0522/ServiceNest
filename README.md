@@ -37,4 +37,13 @@ The production site is generated in `dist/`.
 
 GitHub Actions builds and deploys the site to GitHub Pages whenever changes are pushed to `main`. The workflow builds with `npm run build` and publishes `dist/`.
 
-The custom domain is configured as `serviceNET.com` in `public/CNAME`. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source. Configure the domain's DNS with the records GitHub Pages specifies for an apex domain, then enable HTTPS in the Pages settings. DNS changes may take time to propagate.
+The custom domain `serviceNET.com` is attached to this repository's GitHub Pages site. For the apex domain, configure these `A` records with your DNS provider:
+
+| Host | Type | Value |
+| --- | --- | --- |
+| `@` | `A` | `185.199.108.153` |
+| `@` | `A` | `185.199.109.153` |
+| `@` | `A` | `185.199.110.153` |
+| `@` | `A` | `185.199.111.153` |
+
+After the DNS records propagate, enable **Enforce HTTPS** in the repository's **Settings → Pages**. DNS changes can take up to 24 hours to propagate.
