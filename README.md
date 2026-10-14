@@ -43,6 +43,24 @@ The API creates `data/servicenest.sqlite` on first start and seeds the catalogue
 
 Authenticated requests use a bearer token. For production, configure HTTPS, request rate limiting, database backups, and an approved payment provider; do not expose the development server directly to the internet.
 
+The account table uses this SQLite schema; `password_salt` remains for upgrading existing scrypt accounts, and `address` supports customer bookings:
+
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('customer', 'provider')),
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+```
+
+Phone numbers are normalized and checked inside an atomic write transaction, preventing new duplicate registrations while keeping existing databases with older phone formatting usable.
+
 Registration accepts `name`, `email`, `password`, `role` (`customer` or `provider`), `phone`, and `address`. Provider registrations also require `businessName`, `categoryId`, `description`, `serviceArea`, and `hourlyRate`. The API returns the signed JWT and a profile without password fields. Set a private `JWT_SECRET` of at least 32 bytes in production; the Render Blueprint generates one automatically.
 
 ## Deploy the API with persistent storage
