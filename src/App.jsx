@@ -214,16 +214,18 @@ const App = () => {
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    api.getServices()
-      .then(({ services: savedServices }) => {
-        setServices(savedServices);
-        setNotice('');
-      })
-      .catch(() => {
-        setNotice('The service API is offline. Showing the sample catalogue; sign-in, bookings, and saved listings require the API server.');
-      });
+    if (import.meta.env.VITE_STATIC_DEMO !== 'true') {
+      api.getServices()
+        .then(({ services: savedServices }) => {
+          setServices(savedServices);
+          setNotice('');
+        })
+        .catch(() => {
+          setNotice('The service API is offline. Showing the sample catalogue; sign-in, bookings, and saved listings require the API server.');
+        });
+    }
 
-    if (hasSession()) {
+    if (import.meta.env.VITE_STATIC_DEMO !== 'true' && hasSession()) {
       api.getCurrentUser()
         .then(setUser)
         .catch((error) => {

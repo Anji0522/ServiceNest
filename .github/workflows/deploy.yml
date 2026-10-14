@@ -30,6 +30,8 @@ jobs:
         run: npm ci
       - name: Build site
         run: npm run build
+        env:
+          VITE_STATIC_DEMO: 'true'
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
