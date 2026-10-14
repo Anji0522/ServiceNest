@@ -37,3 +37,172 @@
 .conversation-error { margin: 0; }
 .conversation-poll-note { color: var(--ink-soft); font-size: .78rem; text-align: center; }
 @media (max-width: 520px) { .record-card-heading, .record-card-footer { flex-direction: column; } }
+
+/* Payment Methods & Secure Banking */
+.payment-method-details {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--page);
+}
+.payment-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pay-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cod-badge { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.upi-badge { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+.netbanking-badge { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.secure-badge {
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: #047857;
+  background: #d1fae5;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+}
+.pay-security-note {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.upi-handle-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.upi-pill {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.upi-pill:hover {
+  background: var(--teal-tint);
+  border-color: var(--teal);
+  color: var(--teal-dark);
+}
+.otp-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.otp-input-row input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+}
+.otp-send-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.otp-send-btn:hover {
+  background: var(--teal);
+  color: #fff;
+}
+
+/* Provider Finances & Payout Ledger */
+.finances-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.finance-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.finance-card-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.finance-card-amount {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.finance-card-amount.online { color: #0d9488; }
+.finance-card-amount.cash { color: #d97706; }
+.finance-card-sub {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.payout-account-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--page);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.payout-account-info h4 {
+  font-size: 0.92rem;
+  margin-bottom: 3px;
+}
+.payout-account-info p {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+}
+.action-pill-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.action-pill-btn:hover {
+  background: var(--teal-tint);
+}
+.action-pill-btn.primary {
+  background: var(--teal);
+  color: #fff;
+}
+.action-pill-btn.primary:hover {
+  background: var(--teal-dark);
+}

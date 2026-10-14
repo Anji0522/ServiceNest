@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { clearAuthSession, readAuthSession, saveAuthSession } from './auth-session';
 import { getAllMergedServices, getStoredCustomServices, INITIAL_SERVICES, saveCustomService } from './services-data';
+import { maskAccountNumber, maskUpiId } from './payments';
 
 export { getAllMergedServices, getStoredCustomServices, INITIAL_SERVICES, saveCustomService };
 
@@ -243,6 +244,12 @@ export const api = {
         const user = readAuthSession()?.user;
         const allServices = getAllMergedServices();
         const matchedService = allServices.find((s) => String(s.id) === String(details.serviceId));
+        const method = details.paymentMethod || 'cash';
+        const isOnlinePaid = ['upi', 'netbanking', 'razorpay'].includes(method);
+        const txnId = isOnlinePaid
+          ? `TXN-${method.toUpperCase()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+          : null;
+
         const newBooking = {
           id: `demo-booking-${Date.now()}`,
           customer_id: user?.id || 'demo-customer-1',
@@ -256,8 +263,13 @@ export const api = {
           service_title: matchedService?.title || 'Home Service',
           category_name: matchedService?.category_name || 'Service',
           status: 'accepted',
-          payment_status: details.paymentMethod === 'razorpay' ? 'paid' : 'pending',
-          payment_method: details.paymentMethod || 'cash',
+          payment_status: isOnlinePaid ? 'paid' : 'pending',
+          payment_method: method,
+          transaction_id: txnId,
+          payment_bank: details.bankName || '',
+          payment_upi: details.upiId ? maskUpiId(details.upiId) : '',
+          payment_account_masked: details.accountNumber ? maskAccountNumber(details.accountNumber) : '',
+          paid_at: isOnlinePaid ? new Date().toISOString() : null,
           total_amount: Math.round((details.hours || 1) * (matchedService?.price_per_hour || 45)),
           hours: details.hours || 1,
           scheduled_date: details.appointmentAt,
@@ -272,10 +284,53 @@ export const api = {
         };
         const current = getStoredDemoBookings();
         localStorage.setItem(DEMO_BOOKINGS_KEY, JSON.stringify([newBooking, ...current]));
+        window.dispatchEvent(new CustomEvent('servicenest:booking-created', { detail: newBooking }));
         return newBooking;
       }
       throw error;
     }
+  },
+  updateBookingPayment: async (bookingId, paymentData) => {
+    const current = getStoredDemoBookings();
+    const index = current.findIndex((b) => String(b.id) === String(bookingId));
+    if (index >= 0) {
+      const method = paymentData.paymentMethod || 'upi';
+      const txnId = `TXN-${method.toUpperCase()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const updated = [...current];
+      updated[index] = {
+        ...updated[index],
+        payment_status: 'paid',
+        payment_method: method,
+        transaction_id: txnId,
+        payment_bank: paymentData.bankName || '',
+        payment_upi: paymentData.upiId ? maskUpiId(paymentData.upiId) : '',
+        payment_account_masked: paymentData.accountNumber ? maskAccountNumber(paymentData.accountNumber) : '',
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      localStorage.setItem(DEMO_BOOKINGS_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('servicenest:booking-paid', { detail: updated[index] }));
+      return updated[index];
+    }
+    return null;
+  },
+  markCashCollected: async (bookingId) => {
+    const current = getStoredDemoBookings();
+    const index = current.findIndex((b) => String(b.id) === String(bookingId));
+    if (index >= 0) {
+      const updated = [...current];
+      updated[index] = {
+        ...updated[index],
+        payment_status: 'paid',
+        status: 'completed',
+        transaction_id: `COD-COLLECTED-${String(bookingId).slice(-6)}`,
+        updated_at: new Date().toISOString(),
+      };
+      localStorage.setItem(DEMO_BOOKINGS_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('servicenest:booking-paid', { detail: updated[index] }));
+      return updated[index];
+    }
+    return null;
   },
   createBookingOrder: (details, idempotencyKey) => request('/bookings', {
     method: 'POST',

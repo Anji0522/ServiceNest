@@ -599,8 +599,8 @@ const handle = async (request, response) => {
       throw new HttpError(400, 'Choose an appointment time in the future.');
     }
     const paymentMethod = body.paymentMethod || 'cash';
-    if (!['cash', 'razorpay'].includes(paymentMethod)) {
-      throw new HttpError(400, 'Choose cash or Razorpay as the payment method.');
+    if (!['cash', 'upi', 'netbanking', 'razorpay'].includes(paymentMethod)) {
+      throw new HttpError(400, 'Choose cash (COD), upi, netbanking, or Razorpay as the payment method.');
     }
     if (paymentMethod === 'razorpay' && !razorpay) {
       throw new HttpError(503, 'Online payments are not configured yet. Choose cash after service or try again later.');
@@ -679,16 +679,20 @@ const handle = async (request, response) => {
     const id = randomUUID();
     const paymentId = randomUUID();
     const totalAmount = Math.round(service.price_per_hour * hours * 100) / 100;
+    const isDigitalPaid = ['upi', 'netbanking'].includes(paymentMethod);
+    const initialStatus = isDigitalPaid ? 'accepted' : 'pending';
+    const initialPaymentStatus = isDigitalPaid ? 'paid' : 'pending';
+
     transaction(() => {
       database.prepare(`
         INSERT INTO bookings
           (id, customer_id, provider_id, service_id, appointment_at, scheduled_date, address, notes, hours, total_amount, status, payment_status, idempotency_key, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?, ?)
-      `).run(id, user.id, service.provider_id, serviceId, appointment.toISOString(), appointment.toISOString(), address, notes, hours, totalAmount, idempotencyKey, new Date().toISOString());
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, user.id, service.provider_id, serviceId, appointment.toISOString(), appointment.toISOString(), address, notes, hours, totalAmount, initialStatus, initialPaymentStatus, idempotencyKey, new Date().toISOString());
       database.prepare(`
         INSERT INTO payments (id, booking_id, amount, payment_method, status, idempotency_key, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
-      `).run(paymentId, id, totalAmount, paymentMethod, idempotencyKey, new Date().toISOString(), new Date().toISOString());
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(paymentId, id, totalAmount, paymentMethod, initialPaymentStatus, idempotencyKey, new Date().toISOString(), new Date().toISOString());
     });
     if (paymentMethod === 'razorpay') {
       const order = await createRazorpayOrder(paymentId, id, idempotencyKey, user.id, totalAmount);
@@ -709,7 +713,7 @@ const handle = async (request, response) => {
         id, customer_id: user.id, provider_id: service.provider_id, service_id: serviceId, service_title: service.title,
         provider_name: service.provider_name, category_name: service.category_name,
         appointment_at: appointment.toISOString(), scheduled_date: appointment.toISOString(), address, notes, hours, total_amount: totalAmount,
-        status: 'pending', payment_id: paymentId, payment_method: paymentMethod, payment_status: 'pending', currency: 'INR',
+        status: initialStatus, payment_id: paymentId, payment_method: paymentMethod, payment_status: initialPaymentStatus, currency: 'INR',
       },
     });
   }
