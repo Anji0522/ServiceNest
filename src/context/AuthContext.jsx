@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { clearAuthSession, readAuthSession, saveAuthSession } from '../lib/auth-session';
 import { AuthContext } from './auth-context';
+import { repositoryPagesBasePath } from '../lib/routes';
 
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(
@@ -22,9 +23,7 @@ export const AuthProvider = ({ children }) => {
     };
     const handleExpired = () => {
       clearAuthSession();
-      const basePath = window.location.pathname === '/ServiceNET' || window.location.pathname.startsWith('/ServiceNET/')
-        ? '/ServiceNET'
-        : '';
+      const basePath = repositoryPagesBasePath();
       window.history.replaceState(null, '', `${basePath}/login`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     };
