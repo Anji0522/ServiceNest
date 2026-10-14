@@ -224,12 +224,20 @@ const App = () => {
     const syncRoute = () => {
       const current = routePath();
       setRoute(current);
-      setShowLogin(current === '/login');
+      setShowLogin(!user && current === '/login');
       setPanel(current === '/customer/bookings' ? 'bookings' : current === '/provider/dashboard' ? 'provider' : '');
     };
     window.addEventListener('popstate', syncRoute);
+    syncRoute();
     return () => window.removeEventListener('popstate', syncRoute);
-  }, []);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && route === '/login') {
+      const targetPath = user.role === 'provider' ? '/provider/dashboard' : '/customer/bookings';
+      navigateToRoute(targetPath, true);
+    }
+  }, [route, user]);
 
   useEffect(() => {
     if (import.meta.env.VITE_STATIC_DEMO !== 'true') {
