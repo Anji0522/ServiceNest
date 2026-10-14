@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, categories } from '../../lib/api';
+import { api, categories, saveCustomService } from '../../lib/api';
 import './index.css';
 
 const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
@@ -32,6 +32,11 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
     const details = Object.fromEntries(form.entries());
     try {
       let user;
+      const categoryId = Number(details.categoryId) || 1;
+      const categoryObj = categories.find((c) => c.id === categoryId);
+      const categoryName = categoryObj ? categoryObj.name : 'Home Services';
+      const businessName = details.businessName || `${details.name || 'Provider'} Services`;
+
       if (serviceStatus === 'available') {
         user = mode === 'register'
           ? await api.register({
@@ -41,6 +46,24 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
             hourlyRate: Number(details.hourlyRate),
           })
           : await api.login({ email: details.email, password: details.password });
+
+        if (mode === 'register' && role === 'provider') {
+          saveCustomService({
+            id: `svc-${Date.now()}`,
+            provider_id: user.id,
+            provider_name: businessName,
+            category_id: categoryId,
+            category_name: categoryName,
+            title: `${categoryName} by ${businessName}`,
+            description: details.description || `Certified professional ${categoryName.toLowerCase()} services. High quality workmanship guaranteed.`,
+            price_per_hour: Number(details.hourlyRate) || 45,
+            service_area: details.serviceArea || 'Metro City',
+            rating: 5.0,
+            review_count: 1,
+            avatar: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150&auto=format&fit=crop&q=80',
+            verified: true,
+          });
+        }
       } else {
         const demoRole = mode === 'register' ? role : (role || 'customer');
         user = {
@@ -53,15 +76,33 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
           created_at: new Date().toISOString(),
           ...(demoRole === 'provider' ? {
             providerProfile: {
-              business_name: details.businessName || `${details.name || 'Provider'} Services`,
-              category_id: Number(details.categoryId) || 1,
-              description: details.description || 'Professional home service provider.',
+              business_name: businessName,
+              category_id: categoryId,
+              description: details.description || `Certified professional ${categoryName.toLowerCase()} services.`,
               service_area: details.serviceArea || 'Metro City',
               hourly_rate: Number(details.hourlyRate) || 45,
             },
           } : {}),
         };
         api.setDemoSession(`demo-token-${Date.now()}`, user);
+
+        if (demoRole === 'provider') {
+          saveCustomService({
+            id: `svc-${Date.now()}`,
+            provider_id: user.id,
+            provider_name: businessName,
+            category_id: categoryId,
+            category_name: categoryName,
+            title: `${categoryName} by ${businessName}`,
+            description: details.description || `Certified professional ${categoryName.toLowerCase()} services. High quality workmanship guaranteed.`,
+            price_per_hour: Number(details.hourlyRate) || 45,
+            service_area: details.serviceArea || 'Metro City',
+            rating: 5.0,
+            review_count: 1,
+            avatar: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150&auto=format&fit=crop&q=80',
+            verified: true,
+          });
+        }
       }
       onAuthenticated(user);
     } catch (requestError) {

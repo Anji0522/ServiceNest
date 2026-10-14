@@ -312,7 +312,21 @@ export const ProviderDashboard = ({ user, onClose, onServiceCreated, onMessage }
       </form>
       {error && <p className="form-error panel-error" role="alert">{error}</p>}
       <h3 className="panel-section-title">Your listings <span>{services.length}</span></h3>
-      {services.length > 0 && <ul className="listing-chips">{services.map((service) => <li key={service.id}>{service.title} · ₹{service.price_per_hour}/hr</li>)}</ul>}
+      {services.length > 0 && (
+        <>
+          <ul className="listing-chips">
+            {services.map((service) => <li key={service.id}>{service.title} · ₹{service.price_per_hour}/hr</li>)}
+          </ul>
+          <button
+            type="button"
+            className="message-action"
+            style={{ marginTop: '10px' }}
+            onClick={onClose}
+          >
+            View in Customer Marketplace →
+          </button>
+        </>
+      )}
       <h3 className="panel-section-title">Booking history <span>{bookings.length}</span></h3>
       <BookingHistory bookings={bookings} error={error} loading={!profile} user={user} onMessage={onMessage} />
     </PanelFrame>

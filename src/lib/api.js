@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { clearAuthSession, readAuthSession, saveAuthSession } from './auth-session';
+import { getAllMergedServices, getStoredCustomServices, INITIAL_SERVICES, saveCustomService } from './services-data';
+
+export { getAllMergedServices, getStoredCustomServices, INITIAL_SERVICES, saveCustomService };
 
 const rawApiUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim();
 const API_ROOT = rawApiUrl
@@ -15,7 +18,6 @@ client.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-
 
 client.interceptors.response.use(
   (response) => response,
@@ -86,9 +88,28 @@ const getStoredDemoBookings = () => {
   }
 };
 
+export const categories = [
+  { id: 1, name: 'Electrician' },
+  { id: 2, name: 'Plumber' },
+  { id: 3, name: 'AC Repair' },
+  { id: 4, name: 'Cleaning' },
+  { id: 5, name: 'Carpentry' },
+  { id: 6, name: 'Painting' },
+];
+
 export const api = {
   checkAccountService: () => request('/health').then(({ status }) => status === 'ok'),
-  getServices: () => request('/services'),
+  getServices: async () => {
+    const custom = getStoredCustomServices();
+    try {
+      const response = await request('/services');
+      const backendServices = Array.isArray(response?.services) ? response.services : [];
+      const customIds = new Set(custom.map((s) => String(s.id)));
+      return { services: [...custom, ...backendServices.filter((s) => !customIds.has(String(s.id)))] };
+    } catch {
+      return { services: getAllMergedServices() };
+    }
+  },
   register: (details) => authenticate('/auth/register', details),
   login: (details) => authenticate('/auth/login', details),
   setDemoSession: (token, user) => saveAuthSession(token, user),
@@ -115,7 +136,24 @@ export const api = {
       const { bookings } = await request('/bookings/my-history');
       return bookings;
     } catch {
-      return getStoredDemoBookings();
+      const user = readAuthSession()?.user;
+      const allBookings = getStoredDemoBookings();
+      if (user?.role === 'provider') {
+        const userServices = getStoredCustomServices().filter((s) => (
+          String(s.provider_id) === String(user.id)
+          || s.provider_name === user.name
+          || s.provider_name === user.providerProfile?.business_name
+        ));
+        const userServiceIds = new Set(userServices.map((s) => String(s.id)));
+        return allBookings.filter((b) => (
+          String(b.provider_id) === String(user.id)
+          || b.provider_name === user.name
+          || b.provider_name === user.providerProfile?.business_name
+          || userServiceIds.has(String(b.service_id))
+          || user.email === 'provider@example.com'
+        ));
+      }
+      return allBookings;
     }
   },
   getBookingMessages: async (bookingId) => {
@@ -159,7 +197,22 @@ export const api = {
       const { bookings } = await request('/provider/bookings');
       return bookings;
     } catch {
-      return getStoredDemoBookings();
+      const user = readAuthSession()?.user;
+      const allBookings = getStoredDemoBookings();
+      if (!user) return allBookings;
+      const userServices = getStoredCustomServices().filter((s) => (
+        String(s.provider_id) === String(user.id)
+        || s.provider_name === user.name
+        || s.provider_name === user.providerProfile?.business_name
+      ));
+      const userServiceIds = new Set(userServices.map((s) => String(s.id)));
+      return allBookings.filter((b) => (
+        String(b.provider_id) === String(user.id)
+        || b.provider_name === user.name
+        || b.provider_name === user.providerProfile?.business_name
+        || userServiceIds.has(String(b.service_id))
+        || user.email === 'provider@example.com'
+      ));
     }
   },
   getProviderProfile: async () => {
@@ -169,7 +222,7 @@ export const api = {
     } catch {
       const user = readAuthSession()?.user;
       return user?.providerProfile || {
-        business_name: 'Elena Rostova HVAC',
+        business_name: user?.name ? `${user.name} Services` : 'Elena Rostova HVAC',
         category_id: 3,
         description: 'HVAC Seasonal Tune-Up & Gas Refill',
         service_area: 'North Hills & Suburbs',
@@ -188,24 +241,30 @@ export const api = {
     } catch (error) {
       if (!error.cause?.response) {
         const user = readAuthSession()?.user;
+        const allServices = getAllMergedServices();
+        const matchedService = allServices.find((s) => String(s.id) === String(details.serviceId));
         const newBooking = {
           id: `demo-booking-${Date.now()}`,
           customer_id: user?.id || 'demo-customer-1',
-          provider_id: '1',
+          customer_name: user?.name || 'Demo Customer',
+          customer_email: user?.email || 'customer@example.com',
+          customer_phone: user?.phone || '+1 555-0199',
+          customer_address: details.address || user?.address || '123 Market St',
+          provider_id: matchedService?.provider_id || '1',
+          provider_name: matchedService?.provider_name || 'Service Professional',
           service_id: details.serviceId,
+          service_title: matchedService?.title || 'Home Service',
+          category_name: matchedService?.category_name || 'Service',
           status: 'accepted',
           payment_status: details.paymentMethod === 'razorpay' ? 'paid' : 'pending',
           payment_method: details.paymentMethod || 'cash',
-          total_amount: Math.round((details.hours || 1) * 45),
+          total_amount: Math.round((details.hours || 1) * (matchedService?.price_per_hour || 45)),
           hours: details.hours || 1,
           scheduled_date: details.appointmentAt,
           appointment_at: details.appointmentAt,
-          address: details.address,
+          address: details.address || user?.address || '123 Market St',
           notes: details.notes || '',
-          service_title: 'Home Service',
-          category_name: 'Service',
-          provider_name: 'Service Professional',
-          counterpart_name: 'Service Professional',
+          counterpart_name: matchedService?.provider_name || 'Service Professional',
           counterpart_phone: '+1 555-0100',
           counterpart_email: 'provider@example.com',
           created_at: new Date().toISOString(),
@@ -228,10 +287,49 @@ export const api = {
     data: details,
   }),
   getProviderServices: async () => {
+    const session = readAuthSession();
+    const user = session?.user;
     try {
       const { services } = await request('/provider/services');
-      return services;
+      const custom = getStoredCustomServices().filter((s) => (
+        !user
+        || String(s.provider_id) === String(user.id)
+        || s.provider_name === user.name
+        || s.provider_name === user.providerProfile?.business_name
+      ));
+      const ids = new Set(services.map((s) => String(s.id)));
+      return [...services, ...custom.filter((s) => !ids.has(String(s.id)))];
     } catch {
+      const allCustom = getStoredCustomServices();
+      const userCustom = allCustom.filter((s) => (
+        !user
+        || String(s.provider_id) === String(user.id)
+        || s.provider_name === user.name
+        || s.provider_name === user.providerProfile?.business_name
+      ));
+      if (userCustom.length > 0) {
+        return userCustom;
+      }
+      if (user?.providerProfile) {
+        const catName = categories.find((category) => category.id === user.providerProfile.category_id)?.name || 'Service';
+        return [
+          {
+            id: `svc-${user.id || 'demo'}`,
+            provider_id: user.id || 3,
+            provider_name: user.providerProfile.business_name || user.name,
+            category_id: user.providerProfile.category_id || 1,
+            category_name: catName,
+            title: `${user.providerProfile.business_name || user.name} Service`,
+            description: user.providerProfile.description || 'Professional home service.',
+            price_per_hour: user.providerProfile.hourly_rate || 45,
+            service_area: user.providerProfile.service_area || 'Metro City',
+            rating: 5.0,
+            review_count: 1,
+            avatar: '',
+            verified: true,
+          },
+        ];
+      }
       return [
         {
           id: 103,
@@ -252,37 +350,41 @@ export const api = {
     }
   },
   createProviderService: async (details) => {
+    const session = readAuthSession();
+    const user = session?.user;
+    const categoryId = Number(details.categoryId) || 1;
+    const categoryName = categories.find((category) => category.id === categoryId)?.name || 'Home Services';
+    const providerName = user?.providerProfile?.business_name || user?.name || 'Local Service Pro';
+    const providerId = user?.id || `prov-${Date.now()}`;
+    const hourlyRate = Number(details.hourlyRate) || Number(user?.providerProfile?.hourly_rate) || 45;
+
+    let serviceToSave;
     try {
       const { service } = await request('/provider/services', {
         method: 'POST',
         data: details,
       });
-      return service;
+      serviceToSave = service;
     } catch {
-      return {
-        id: Date.now(),
-        provider_id: 3,
-        provider_name: 'Elena Rostova',
-        category_id: Number(details.categoryId) || 1,
-        category_name: 'Service',
-        title: details.title,
-        description: details.description,
-        price_per_hour: Number(details.hourlyRate) || 50,
-        service_area: details.serviceArea,
+      serviceToSave = {
+        id: `svc-${Date.now()}`,
+        provider_id: providerId,
+        provider_name: providerName,
+        category_id: categoryId,
+        category_name: categoryName,
+        title: details.title || `${categoryName} by ${providerName}`,
+        description: details.description || user?.providerProfile?.description || `Professional ${categoryName.toLowerCase()} services.`,
+        price_per_hour: hourlyRate,
+        service_area: details.serviceArea || user?.providerProfile?.service_area || 'Metro City',
         rating: 5.0,
         review_count: 1,
-        avatar: '',
+        avatar: user?.avatar || 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150&auto=format&fit=crop&q=80',
         verified: true,
       };
     }
+
+    saveCustomService(serviceToSave);
+    return serviceToSave;
   },
 };
 
-export const categories = [
-  { id: 1, name: 'Electrician' },
-  { id: 2, name: 'Plumber' },
-  { id: 3, name: 'AC Repair' },
-  { id: 4, name: 'Cleaning' },
-  { id: 5, name: 'Carpentry' },
-  { id: 6, name: 'Painting' },
-];
