@@ -5,14 +5,8 @@ import { AuthContext } from './auth-context';
 import { repositoryPagesBasePath } from '../lib/routes';
 
 export const AuthProvider = ({ children }) => {
-  const [session, setSession] = useState(
-    () => import.meta.env.VITE_STATIC_DEMO === 'true' ? null : readAuthSession(),
-  );
-  const [hydrated, setHydrated] = useState(
-    () => import.meta.env.VITE_STATIC_DEMO === 'true'
-      || !readAuthSession()
-      || Boolean(readAuthSession()?.user),
-  );
+  const [session, setSession] = useState(() => readAuthSession());
+  const [hydrated, setHydrated] = useState(() => !readAuthSession() || Boolean(readAuthSession()?.user));
 
   useEffect(() => {
     const handleSession = (event) => setSession(event.detail);
@@ -32,9 +26,7 @@ export const AuthProvider = ({ children }) => {
     window.addEventListener('storage', handleStorage);
 
     const saved = readAuthSession();
-    if (import.meta.env.VITE_STATIC_DEMO === 'true') {
-      clearAuthSession();
-    } else if (saved) {
+    if (saved && !saved.token?.startsWith('demo-')) {
       api.getCurrentUser()
         .then((user) => saveAuthSession(saved.token, user))
         .catch((error) => {

@@ -247,7 +247,7 @@ const App = () => {
           setNotice('');
         })
         .catch(() => {
-          setNotice('The service API is offline. Showing the sample catalogue; sign-in, bookings, and saved listings require the API server.');
+          setNotice('');
         });
     }
 

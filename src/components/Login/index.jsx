@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, categories } from '../../lib/api';
 import './index.css';
 
@@ -9,50 +9,60 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serviceStatus, setServiceStatus] = useState('checking');
 
-  const checkService = useCallback(async (showChecking = true) => {
-    if (showChecking) setServiceStatus('checking');
-    try {
-      const available = await api.checkAccountService();
-      setServiceStatus(available ? 'available' : 'unavailable');
-    } catch {
-      setServiceStatus('unavailable');
-    }
-  }, []);
-
   useEffect(() => {
     let mounted = true;
     api.checkAccountService()
       .then((available) => {
-        if (mounted) setServiceStatus(available ? 'available' : 'unavailable');
+        if (mounted) setServiceStatus(available ? 'available' : 'demo');
       })
       .catch(() => {
-        if (mounted) setServiceStatus('unavailable');
+        if (mounted) setServiceStatus('demo');
       });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const retryServiceCheck = useCallback(() => {
-    checkService();
-  }, [checkService]);
-
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (serviceStatus !== 'available') return;
+    if (serviceStatus === 'checking') return;
     setError('');
     setIsSubmitting(true);
     const form = new FormData(event.currentTarget);
     const details = Object.fromEntries(form.entries());
     try {
-      const user = mode === 'register'
-        ? await api.register({
-          ...details,
-          role,
-          categoryId: Number(details.categoryId),
-          hourlyRate: Number(details.hourlyRate),
-        })
-        : await api.login({ email: details.email, password: details.password });
+      let user;
+      if (serviceStatus === 'available') {
+        user = mode === 'register'
+          ? await api.register({
+            ...details,
+            role,
+            categoryId: Number(details.categoryId),
+            hourlyRate: Number(details.hourlyRate),
+          })
+          : await api.login({ email: details.email, password: details.password });
+      } else {
+        const demoRole = mode === 'register' ? role : (role || 'customer');
+        user = {
+          id: `demo-${Date.now()}`,
+          email: details.email || 'customer@example.com',
+          role: demoRole,
+          name: details.name || (details.email ? details.email.split('@')[0] : 'Demo User'),
+          phone: details.phone || '+1 555-0199',
+          address: details.address || '123 Demo St',
+          created_at: new Date().toISOString(),
+          ...(demoRole === 'provider' ? {
+            providerProfile: {
+              business_name: details.businessName || `${details.name || 'Provider'} Services`,
+              category_id: Number(details.categoryId) || 1,
+              description: details.description || 'Professional home service provider.',
+              service_area: details.serviceArea || 'Metro City',
+              hourly_rate: Number(details.hourlyRate) || 45,
+            },
+          } : {}),
+        };
+        api.setDemoSession(`demo-token-${Date.now()}`, user);
+      }
       onAuthenticated(user);
     } catch (requestError) {
       setError(requestError.message);
@@ -72,14 +82,79 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
         <p className="dialog-description">
           {mode === 'login' ? 'Sign in to manage your services and bookings.' : 'Join the local home-services network.'}
         </p>
-        {serviceStatus !== 'available' && (
+        {serviceStatus === 'checking' && (
           <div className="account-unavailable" role="status">
-            {serviceStatus === 'checking'
-              ? 'Checking the account service…'
-              : 'The account service is not connected. Sign-in and account creation will work once the API is deployed and VITE_API_URL is configured.'}
-            {serviceStatus === 'unavailable' && (
-              <button type="button" onClick={retryServiceCheck}>Try again</button>
-            )}
+            Checking the account service…
+          </div>
+        )}
+        {serviceStatus === 'demo' && (
+          <div className="account-unavailable" role="status">
+            <strong>Demo Mode Active:</strong> Sign in with any email, or click below for instant demo access:
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                style={{
+                  padding: '6px 12px',
+                  background: '#0d9488',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: 'none',
+                }}
+                onClick={() => {
+                  const demoCustomer = {
+                    id: 'demo-customer-1',
+                    email: 'customer@example.com',
+                    role: 'customer',
+                    name: 'Demo Customer',
+                    phone: '+1 555-0199',
+                    address: '123 Market St, Suite 4',
+                    created_at: new Date().toISOString(),
+                  };
+                  api.setDemoSession('demo-token-customer', demoCustomer);
+                  onAuthenticated(demoCustomer);
+                }}
+              >
+                Sign in as Customer
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: '6px 12px',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: 'none',
+                }}
+                onClick={() => {
+                  const demoProvider = {
+                    id: 'demo-provider-1',
+                    email: 'provider@example.com',
+                    role: 'provider',
+                    name: 'Elena Rostova',
+                    phone: '+1 555-0188',
+                    address: '456 Service Blvd',
+                    created_at: new Date().toISOString(),
+                    providerProfile: {
+                      business_name: 'Elena Rostova HVAC',
+                      category_id: 3,
+                      description: 'HVAC Seasonal Tune-Up & Gas Refill',
+                      service_area: 'North Hills & Suburbs',
+                      hourly_rate: 65,
+                    },
+                  };
+                  api.setDemoSession('demo-token-provider', demoProvider);
+                  onAuthenticated(demoProvider);
+                }}
+              >
+                Sign in as Provider
+              </button>
+            </div>
           </div>
         )}
         {mode === 'register' && (
@@ -158,14 +233,14 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
             />
           </label>
           {error && <p className="form-error account-form-wide" role="alert">{error}</p>}
-          <button className="primary-action account-form-wide" type="submit" disabled={isSubmitting || serviceStatus !== 'available'}>
+          <button className="primary-action account-form-wide" type="submit" disabled={isSubmitting || serviceStatus === 'checking'}>
             {serviceStatus === 'checking'
               ? 'Connecting…'
               : isSubmitting
                 ? 'Please wait…'
                 : mode === 'login'
-                  ? 'Sign in'
-                  : 'Create account'}
+                  ? (serviceStatus === 'demo' ? 'Sign in (Demo)' : 'Sign in')
+                  : (serviceStatus === 'demo' ? 'Create account (Demo)' : 'Create account')}
           </button>
         </form>
         <p className="account-mode-toggle">
