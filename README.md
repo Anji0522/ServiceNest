@@ -4,7 +4,7 @@ ServiceNest is a React service marketplace with a Node.js API and a local SQLite
 
 ## Live demo
 
-[Open the ServiceNest demo on GitHub Pages](https://anji0522.github.io/ServiceNET/).
+[Open the ServiceNest live demo](https://anji0522.github.io/ServiceNest/).
 
 The hosted demo displays the sample catalogue until the Render API is deployed and the `VITE_API_URL` GitHub Actions repository variable is configured. Local development runs the API alongside the frontend.
 
@@ -87,19 +87,6 @@ Booking/payment rows are committed atomically in SQLite. Razorpay order creation
 The local API allows the standard Vite development and preview origins on ports 5173, 5174, 4173, and 4174, including Vite's fallback ports when a default port is already in use. The Render Blueprint restricts the deployed API to the GitHub Pages and ServiceNest custom domains. Set `CORS_ORIGINS` on Render to a comma-separated list of exact trusted origins if the frontend is served from another domain. Do not put credentials or API secrets in `VITE_API_URL` or other `VITE_` variables; frontend build variables are public.
 
 The API stores customer contact details and service addresses, plus booking and conversation records. Passwords are bcrypt-hashed; payment card or bank data is not collected. Restrict access to the Render project and disk, use HTTPS, and establish appropriate privacy, retention, and backup practices before collecting real customer data.
-
-## Custom-domain DNS
-
-The Pages build publishes `public/CNAME` for `servicenet.com`. At the domain's DNS provider, point the apex domain to GitHub Pages by adding these four `A` records:
-
-| Host | Type | Value |
-| --- | --- | --- |
-| `@` | `A` | `185.199.108.153` |
-| `@` | `A` | `185.199.109.153` |
-| `@` | `A` | `185.199.110.153` |
-| `@` | `A` | `185.199.111.153` |
-
-Optionally point `www` to `anji0522.github.io` with a `CNAME` record. DNS changes can take up to 24 hours to propagate; enable **Enforce HTTPS** in GitHub **Settings ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Pages** after the domain verifies.
 
 ## Checks
 
