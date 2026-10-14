@@ -52,6 +52,7 @@ const authenticate = async (path, details) => {
 };
 
 export const api = {
+  checkAccountService: () => request('/health').then(({ status }) => status === 'ok'),
   getServices: () => request('/services'),
   register: (details) => authenticate('/auth/register', details),
   login: (details) => authenticate('/auth/login', details),
