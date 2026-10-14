@@ -2,6 +2,8 @@
 
 ServiceNest is a React single-page app for browsing local home-service professionals. The current version is a front-end demo backed by sample data in `src/App.jsx`; it does not include a live booking API, authentication, or provider accounts.
 
+# Live Demo Link :- https://serviceNET.com
+
 ## Features
 
 - Browse sample electricians, plumbers, HVAC technicians, cleaners, carpenters, and painters.
