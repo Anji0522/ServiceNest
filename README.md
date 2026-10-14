@@ -66,7 +66,7 @@ CREATE TABLE users (
 
 Phone numbers are normalized and checked inside an atomic write transaction, preventing new duplicate registrations while keeping existing databases with older phone formatting usable.
 
-Registration accepts `name`, `email`, `password`, `role` (`customer` or `provider`), `phone`, and `address`. Provider registrations also require `businessName`, `categoryId`, `description`, `serviceArea`, and `hourlyRate`. The API returns the signed JWT and a profile without password fields. Set a private `JWT_SECRET` of at least 32 bytes in production; the Render Blueprint generates one automatically.
+Registration accepts `name`, `email`, `password`, `role` (`customer` or `provider`), and `phone`; `address` is optional. Provider registrations also require `businessName`, `categoryId`, `description`, `serviceArea`, and `hourlyRate`. The API returns a signed JWT containing `userId` and `role`, plus a profile without password fields. Set a private `JWT_SECRET` of at least 32 bytes in production; the Render Blueprint generates one automatically.
 
 ### Configure Razorpay
 

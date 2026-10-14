@@ -13,7 +13,7 @@ const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'productio
 if (Buffer.byteLength(jwtSecret) < 32) {
   throw new Error('JWT_SECRET must contain at least 32 bytes.');
 }
-const passwordHashRounds = 12;
+const passwordHashRounds = 10;
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
 const razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
@@ -121,7 +121,7 @@ const publicService = (service) => ({ ...service, verified: Boolean(service.veri
 
 const createSession = (user) => {
   const profile = database.prepare('SELECT id, email, role, name, phone, address, created_at FROM users WHERE id = ?').get(user.id);
-  const token = jwt.sign({ role: profile.role }, jwtSecret, {
+  const token = jwt.sign({ userId: profile.id, role: profile.role }, jwtSecret, {
     algorithm: 'HS256',
     subject: user.id,
     jwtid: randomUUID(),
@@ -280,38 +280,27 @@ const handlePaymentVerification = async (request, response) => {
 };
 
 const handleRegistration = async (request, response) => {
-  const body = await readBody(request);
-  const name = requiredString(body.name, 'Name', 100);
-  const email = requiredString(body.email, 'Email', 254).toLowerCase();
-  const phone = requiredString(body.phone, 'Phone', 30).replace(/[\s().-]/g, '');
-  const password = requiredString(body.password, 'Password', 200);
-  const address = requiredString(body.address, 'Address', 500);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Enter a valid email address.');
-  if (!/^\+?[1-9]\d{7,14}$/.test(phone)) throw new HttpError(400, 'Enter a valid phone number with 8 to 15 digits.');
-  if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
-    throw new HttpError(400, 'Password must contain 8 to 72 UTF-8 bytes.');
-  }
-  if (!['customer', 'provider'].includes(body.role)) throw new HttpError(400, 'Choose customer or provider account type.');
-  if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
-    throw new HttpError(409, 'An account with that email already exists.');
-  }
-  if (findUserByPhone(phone)) {
-    throw new HttpError(409, 'An account with that phone number already exists.');
-  }
+  try {
+    const body = await readBody(request);
+    const name = requiredString(body.name, 'Name', 100);
+    const email = requiredString(body.email, 'Email', 254).toLowerCase();
+    const phone = requiredString(body.phone, 'Phone', 30).replace(/[\s().-]/g, '');
+    const password = requiredString(body.password, 'Password', 200);
+    const address = typeof body.address === 'string' ? body.address.trim().slice(0, 500) : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpError(400, 'Enter a valid email address.');
+    }
+    if (!/^\+?[1-9]\d{7,14}$/.test(phone)) {
+      throw new HttpError(400, 'Enter a valid phone number with 8 to 15 digits.');
+    }
+    if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+      throw new HttpError(400, 'Password must contain 8 to 72 UTF-8 bytes.');
+    }
+    if (body.role !== 'customer' && body.role !== 'provider') {
+      throw new HttpError(400, 'Choose customer or provider account type.');
+    }
 
-  const id = randomUUID();
-  const passwordHash = await bcrypt.hash(password, passwordHashRounds);
-  const createAccount = () => transaction(() => {
-    if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
-      throw new HttpError(409, 'An account with that email already exists.');
-    }
-    if (findUserByPhone(phone)) {
-      throw new HttpError(409, 'An account with that phone number already exists.');
-    }
-    database.prepare(`
-      INSERT INTO users (id, email, password_hash, password_salt, role, name, phone, address, created_at)
-      VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)
-    `).run(id, email, passwordHash, body.role, name, phone, address, new Date().toISOString());
+    let provider;
     if (body.role === 'provider') {
       const categoryId = Number(body.categoryId);
       const categoryName = categories.get(categoryId);
@@ -322,31 +311,76 @@ const handleRegistration = async (request, response) => {
       if (!categoryName || !Number.isFinite(hourlyRate) || hourlyRate <= 0 || hourlyRate > 100000) {
         throw new HttpError(400, 'Choose a valid service category and hourly rate.');
       }
-      database.prepare(`
-        INSERT INTO provider_profiles (user_id, business_name, category_id, description, service_area, hourly_rate)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(id, businessName, categoryId, description, serviceArea, hourlyRate);
-      database.prepare(`
-        INSERT INTO services (provider_id, provider_name, category_id, category_name, title, description, price_per_hour, service_area, rating, review_count, avatar, verified)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', 0)
-      `).run(id, businessName, categoryId, categoryName, businessName, description, hourlyRate, serviceArea);
+      provider = { categoryId, categoryName, businessName, description, serviceArea, hourlyRate };
     }
-  });
-  try {
-    createAccount();
-  } catch (error) {
-    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      if (error.message.includes('users.phone')) {
-        throw new HttpError(409, 'An account with that phone number already exists.');
-      }
-      if (error.message.includes('users.email')) {
+
+    if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
+      throw new HttpError(409, 'An account with that email already exists.');
+    }
+    if (findUserByPhone(phone)) {
+      throw new HttpError(409, 'An account with that phone number already exists.');
+    }
+
+    const id = randomUUID();
+    const passwordHash = await bcrypt.hash(password, passwordHashRounds);
+
+    transaction(() => {
+      if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
         throw new HttpError(409, 'An account with that email already exists.');
       }
-      throw new HttpError(409, 'An account with that email or phone number already exists.');
+      if (findUserByPhone(phone)) {
+        throw new HttpError(409, 'An account with that phone number already exists.');
+      }
+
+      database.prepare(`
+        INSERT INTO users (id, email, password_hash, password_salt, role, name, phone, address, created_at)
+        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)
+      `).run(id, email, passwordHash, body.role, name, phone, address, new Date().toISOString());
+
+      if (provider) {
+        database.prepare(`
+          INSERT INTO provider_profiles (user_id, business_name, category_id, description, service_area, hourly_rate)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          provider.businessName,
+          provider.categoryId,
+          provider.description,
+          provider.serviceArea,
+          provider.hourlyRate,
+        );
+        database.prepare(`
+          INSERT INTO services (
+            provider_id, provider_name, category_id, category_name, title, description,
+            price_per_hour, service_area, rating, review_count, avatar, verified
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', 0)
+        `).run(
+          id,
+          provider.businessName,
+          provider.categoryId,
+          provider.categoryName,
+          provider.businessName,
+          provider.description,
+          provider.hourlyRate,
+          provider.serviceArea,
+        );
+      }
+    });
+
+    return send(response, 201, createSession({ id }));
+  } catch (error) {
+    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      const message = error.message.includes('users.phone')
+        ? 'An account with that phone number already exists.'
+        : error.message.includes('users.email')
+          ? 'An account with that email already exists.'
+          : 'An account with that email or phone number already exists.';
+      return send(response, 409, { success: false, message });
     }
-    throw error;
+
+    return sendError(error, request, response);
   }
-  return send(response, 201, createSession({ id }));
 };
 
 const handleLogin = async (request, response) => {
@@ -397,28 +431,37 @@ const handle = async (request, response) => {
   }
 
   if (request.method === 'GET' && pathname === '/api/bookings/my-history') {
-    const user = currentUser(request);
-    if (!user) return send(response, 401, { error: 'Sign in to view booking history.' });
-    const isCustomer = user.role === 'customer';
-    const counterpartJoin = isCustomer
-      ? 'LEFT JOIN users counterpart ON counterpart.id = b.provider_id'
-      : 'JOIN users counterpart ON counterpart.id = b.customer_id';
-    const bookings = database.prepare(`
-      SELECT b.id, b.customer_id, b.provider_id, b.service_id, b.status, b.payment_status,
-        b.total_amount, b.scheduled_date, b.appointment_at, b.created_at, b.updated_at,
-        s.title AS service_title, s.category_name, s.provider_name,
-        CASE WHEN ? = 'customer' THEN COALESCE(counterpart.name, s.provider_name)
-             ELSE counterpart.name END AS counterpart_name,
-        counterpart.phone AS counterpart_phone,
-        counterpart.email AS counterpart_email,
-        CASE WHEN ? = 'provider' THEN counterpart.name ELSE NULL END AS customer_name
-      FROM bookings b
-      JOIN services s ON s.id = b.service_id
-      ${counterpartJoin}
-      WHERE b.${isCustomer ? 'customer_id' : 'provider_id'} = ?
-      ORDER BY COALESCE(b.scheduled_date, b.appointment_at) DESC, b.created_at DESC
-    `).all(user.role, user.role, user.id);
-    return send(response, 200, { bookings, role: user.role });
+    try {
+      const user = currentUser(request);
+      if (!user) return send(response, 401, { success: false, message: 'Sign in to view booking history.' });
+      if (user.role !== 'customer' && user.role !== 'provider') {
+        return send(response, 403, { success: false, message: 'A customer or provider account is required.' });
+      }
+
+      const isCustomer = user.role === 'customer';
+      const userColumn = isCustomer ? 'customer_id' : 'provider_id';
+      const counterpartJoin = isCustomer
+        ? 'LEFT JOIN users counterpart ON counterpart.id = b.provider_id'
+        : 'JOIN users counterpart ON counterpart.id = b.customer_id';
+      const bookings = database.prepare(`
+        SELECT b.id, b.customer_id, b.provider_id, b.service_id, b.status, b.payment_status,
+          b.total_amount, b.scheduled_date, b.appointment_at, b.created_at, b.updated_at,
+          s.title AS service_title, s.category_name, s.provider_name,
+          CASE WHEN ? = 'customer' THEN COALESCE(counterpart.name, s.provider_name)
+               ELSE counterpart.name END AS counterpart_name,
+          counterpart.phone AS counterpart_phone,
+          counterpart.email AS counterpart_email,
+          CASE WHEN ? = 'provider' THEN counterpart.address ELSE NULL END AS customer_address
+        FROM bookings b
+        JOIN services s ON s.id = b.service_id
+        ${counterpartJoin}
+        WHERE b.${userColumn} = ?
+        ORDER BY b.scheduled_date DESC
+      `).all(user.role, user.role, user.id);
+      return send(response, 200, { bookings, role: user.role });
+    } catch (error) {
+      return sendError(error, request, response);
+    }
   }
 
   if (request.method === 'GET' && pathname === '/api/provider/profile') {

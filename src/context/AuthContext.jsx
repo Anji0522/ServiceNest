@@ -55,6 +55,8 @@ export const AuthProvider = ({ children }) => {
     token: session?.token || null,
     user: session?.user || null,
     hydrated,
+    isLoading: !hydrated,
+    login: (token, userData) => saveAuthSession(token, userData),
     setSession: saveAuthSession,
     clearSession: clearAuthSession,
     logout: api.logout,
