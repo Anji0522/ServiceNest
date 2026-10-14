@@ -22,6 +22,8 @@ npm run dev
 
 This starts the Vite frontend and the API together. Open the URL printed by Vite. The API listens on `http://127.0.0.1:3001`; Vite proxies `/api` requests to it. To run either process separately, use `npm run dev:web` and `npm run api` in separate terminals.
 
+For a built local preview, run `npm run build` and then `npm run preview`. The preview command also starts the API and proxies account, booking, and service requests locally.
+
 The API creates `data/servicenest.sqlite` on first start and seeds the catalogue. The database directory is local runtime data and is ignored by Git.
 
 ## Included features

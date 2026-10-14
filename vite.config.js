@@ -1,8 +1,12 @@
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { defineConfig } from 'vite'
+import process from 'node:process'
 
 // https://vite.dev/config/
+const apiTarget = process.env.SERVICENEST_API_TARGET
+  || `http://127.0.0.1:${process.env.API_PORT || 3001}`;
+
 export default defineConfig({
   base: './',
   plugins: [
@@ -11,7 +15,12 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:3001',
+      '/api': apiTarget,
+    },
+  },
+  preview: {
+    proxy: {
+      '/api': apiTarget,
     },
   },
 })
