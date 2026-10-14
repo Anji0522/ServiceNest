@@ -98,109 +98,84 @@ export const categories = [
   { id: 6, name: 'Painting' },
 ];
 
+const isStaticOrOffline = () => {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.location.hostname.includes('github.io')
+    || import.meta.env.VITE_STATIC_DEMO === 'true'
+    || !rawApiUrl
+    || rawApiUrl === '/api'
+  );
+};
+
 export const api = {
-  checkAccountService: () => request('/health').then(({ status }) => status === 'ok'),
+  checkAccountService: async () => {
+    if (isStaticOrOffline()) return false;
+    try {
+      const data = await request('/health');
+      return data?.status === 'ok';
+    } catch {
+      return false;
+    }
+  },
   getServices: async () => {
     const custom = getStoredCustomServices();
-    try {
-      const response = await request('/services');
-      const backendServices = Array.isArray(response?.services) ? response.services : [];
-      const customIds = new Set(custom.map((s) => String(s.id)));
-      return { services: [...custom, ...backendServices.filter((s) => !customIds.has(String(s.id)))] };
-    } catch {
-      return { services: getAllMergedServices() };
+    if (!isStaticOrOffline()) {
+      try {
+        const response = await request('/services');
+        const backendServices = Array.isArray(response?.services) ? response.services : [];
+        const customIds = new Set(custom.map((s) => String(s.id)));
+        return { services: [...custom, ...backendServices.filter((s) => !customIds.has(String(s.id)))] };
+      } catch {
+        return { services: getAllMergedServices() };
+      }
     }
+    return { services: getAllMergedServices() };
   },
   register: (details) => authenticate('/auth/register', details),
   login: (details) => authenticate('/auth/login', details),
   setDemoSession: (token, user) => saveAuthSession(token, user),
-  getCurrentUser: () => request('/auth/me').then(({ user }) => user),
-  logout: async () => {
-    try {
-      await request('/auth/logout', { method: 'POST' });
-    } catch {
-      // In demo mode or offline, clear local session cleanly
-    } finally {
-      clearAuthSession();
+  getCurrentUser: async () => {
+    if (isStaticOrOffline()) {
+      const session = readAuthSession();
+      if (session?.user) return session.user;
+      throw new Error('No user session');
     }
+    return request('/auth/me').then(({ user }) => user);
+  },
+  logout: async () => {
+    if (!isStaticOrOffline()) {
+      try {
+        await request('/auth/logout', { method: 'POST' });
+      } catch {
+        // In demo mode or offline, clear local session cleanly
+      }
+    }
+    clearAuthSession();
   },
   getBookings: async () => {
-    try {
-      const { bookings } = await request('/bookings');
-      return bookings;
-    } catch {
-      return getStoredDemoBookings();
+    if (!isStaticOrOffline()) {
+      try {
+        const { bookings } = await request('/bookings');
+        return bookings;
+      } catch {
+        // fallback
+      }
     }
+    return getStoredDemoBookings();
   },
   getMyBookingHistory: async () => {
-    try {
-      const { bookings } = await request('/bookings/my-history');
-      return bookings;
-    } catch {
-      const user = readAuthSession()?.user;
-      const allBookings = getStoredDemoBookings();
-      if (user?.role === 'provider') {
-        const userServices = getStoredCustomServices().filter((s) => (
-          String(s.provider_id) === String(user.id)
-          || s.provider_name === user.name
-          || s.provider_name === user.providerProfile?.business_name
-        ));
-        const userServiceIds = new Set(userServices.map((s) => String(s.id)));
-        return allBookings.filter((b) => (
-          String(b.provider_id) === String(user.id)
-          || b.provider_name === user.name
-          || b.provider_name === user.providerProfile?.business_name
-          || userServiceIds.has(String(b.service_id))
-          || user.email === 'provider@example.com'
-        ));
+    if (!isStaticOrOffline()) {
+      try {
+        const { bookings } = await request('/bookings/my-history');
+        return bookings;
+      } catch {
+        // fallback
       }
-      return allBookings;
     }
-  },
-  getBookingMessages: async (bookingId) => {
-    try {
-      const { messages } = await request(`/bookings/${encodeURIComponent(bookingId)}/messages`);
-      return messages;
-    } catch {
-      return [
-        {
-          id: 'demo-msg-1',
-          booking_id: bookingId,
-          sender_id: 'provider-1',
-          sender_name: 'Elena Rostova',
-          body: 'Hello! I received your booking request. I will arrive on schedule with all required equipment.',
-          created_at: new Date(Date.now() - 1800000).toISOString(),
-        },
-      ];
-    }
-  },
-  sendBookingMessage: async (bookingId, body) => {
-    try {
-      const { message } = await request(`/bookings/${encodeURIComponent(bookingId)}/messages`, {
-        method: 'POST',
-        data: { body },
-      });
-      return message;
-    } catch {
-      const user = readAuthSession()?.user;
-      return {
-        id: `demo-msg-${Date.now()}`,
-        booking_id: bookingId,
-        sender_id: user?.id || 'demo-user',
-        sender_name: user?.name || 'Customer',
-        body,
-        created_at: new Date().toISOString(),
-      };
-    }
-  },
-  getProviderBookings: async () => {
-    try {
-      const { bookings } = await request('/provider/bookings');
-      return bookings;
-    } catch {
-      const user = readAuthSession()?.user;
-      const allBookings = getStoredDemoBookings();
-      if (!user) return allBookings;
+    const user = readAuthSession()?.user;
+    const allBookings = getStoredDemoBookings();
+    if (user?.role === 'provider') {
       const userServices = getStoredCustomServices().filter((s) => (
         String(s.provider_id) === String(user.id)
         || s.provider_name === user.name
@@ -215,80 +190,155 @@ export const api = {
         || user.email === 'provider@example.com'
       ));
     }
+    return allBookings;
+  },
+  getBookingMessages: async (bookingId) => {
+    if (!isStaticOrOffline()) {
+      try {
+        const { messages } = await request(`/bookings/${encodeURIComponent(bookingId)}/messages`);
+        return messages;
+      } catch {
+        // fallback
+      }
+    }
+    return [
+      {
+        id: 'demo-msg-1',
+        booking_id: bookingId,
+        sender_id: 'provider-1',
+        sender_name: 'Elena Rostova',
+        body: 'Hello! I received your booking request. I will arrive on schedule with all required equipment.',
+        created_at: new Date(Date.now() - 1800000).toISOString(),
+      },
+    ];
+  },
+  sendBookingMessage: async (bookingId, body) => {
+    if (!isStaticOrOffline()) {
+      try {
+        const { message } = await request(`/bookings/${encodeURIComponent(bookingId)}/messages`, {
+          method: 'POST',
+          data: { body },
+        });
+        return message;
+      } catch {
+        // fallback
+      }
+    }
+    const user = readAuthSession()?.user;
+    return {
+      id: `demo-msg-${Date.now()}`,
+      booking_id: bookingId,
+      sender_id: user?.id || 'demo-user',
+      sender_name: user?.name || 'Customer',
+      body,
+      created_at: new Date().toISOString(),
+    };
+  },
+  getProviderBookings: async () => {
+    if (!isStaticOrOffline()) {
+      try {
+        const { bookings } = await request('/provider/bookings');
+        return bookings;
+      } catch {
+        // fallback
+      }
+    }
+    const user = readAuthSession()?.user;
+    const allBookings = getStoredDemoBookings();
+    if (!user) return allBookings;
+    const userServices = getStoredCustomServices().filter((s) => (
+      String(s.provider_id) === String(user.id)
+      || s.provider_name === user.name
+      || s.provider_name === user.providerProfile?.business_name
+    ));
+    const userServiceIds = new Set(userServices.map((s) => String(s.id)));
+    return allBookings.filter((b) => (
+      String(b.provider_id) === String(user.id)
+      || b.provider_name === user.name
+      || b.provider_name === user.providerProfile?.business_name
+      || userServiceIds.has(String(b.service_id))
+      || user.email === 'provider@example.com'
+    ));
   },
   getProviderProfile: async () => {
-    try {
-      const { profile } = await request('/provider/profile');
-      return profile;
-    } catch {
-      const user = readAuthSession()?.user;
-      return user?.providerProfile || {
-        business_name: user?.name ? `${user.name} Services` : 'Elena Rostova HVAC',
-        category_id: 3,
-        description: 'HVAC Seasonal Tune-Up & Gas Refill',
-        service_area: 'North Hills & Suburbs',
-        hourly_rate: 65,
-      };
+    if (!isStaticOrOffline()) {
+      try {
+        const { profile } = await request('/provider/profile');
+        return profile;
+      } catch {
+        // fallback
+      }
     }
+    const user = readAuthSession()?.user;
+    return user?.providerProfile || {
+      business_name: user?.name ? `${user.name} Services` : 'Elena Rostova HVAC',
+      category_id: 3,
+      description: 'HVAC Seasonal Tune-Up & Gas Refill',
+      service_area: 'North Hills & Suburbs',
+      hourly_rate: 65,
+    };
   },
   createBooking: async (details, idempotencyKey) => {
-    try {
-      const { booking } = await request('/bookings', {
-        method: 'POST',
-        data: details,
-        headers: { 'Idempotency-Key': idempotencyKey },
-      });
-      return booking;
-    } catch (error) {
-      if (!error.cause?.response) {
-        const user = readAuthSession()?.user;
-        const allServices = getAllMergedServices();
-        const matchedService = allServices.find((s) => String(s.id) === String(details.serviceId));
-        const method = details.paymentMethod || 'cash';
-        const isOnlinePaid = ['upi', 'netbanking', 'razorpay'].includes(method);
-        const txnId = isOnlinePaid
-          ? `TXN-${method.toUpperCase()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
-          : null;
-
-        const newBooking = {
-          id: `demo-booking-${Date.now()}`,
-          customer_id: user?.id || 'demo-customer-1',
-          customer_name: user?.name || 'Demo Customer',
-          customer_email: user?.email || 'customer@example.com',
-          customer_phone: user?.phone || '+1 555-0199',
-          customer_address: details.address || user?.address || '123 Market St',
-          provider_id: matchedService?.provider_id || '1',
-          provider_name: matchedService?.provider_name || 'Service Professional',
-          service_id: details.serviceId,
-          service_title: matchedService?.title || 'Home Service',
-          category_name: matchedService?.category_name || 'Service',
-          status: 'accepted',
-          payment_status: isOnlinePaid ? 'paid' : 'pending',
-          payment_method: method,
-          transaction_id: txnId,
-          payment_bank: details.bankName || '',
-          payment_upi: details.upiId ? maskUpiId(details.upiId) : '',
-          payment_account_masked: details.accountNumber ? maskAccountNumber(details.accountNumber) : '',
-          paid_at: isOnlinePaid ? new Date().toISOString() : null,
-          total_amount: Math.round((details.hours || 1) * (matchedService?.price_per_hour || 45)),
-          hours: details.hours || 1,
-          scheduled_date: details.appointmentAt,
-          appointment_at: details.appointmentAt,
-          address: details.address || user?.address || '123 Market St',
-          notes: details.notes || '',
-          counterpart_name: matchedService?.provider_name || 'Service Professional',
-          counterpart_phone: '+1 555-0100',
-          counterpart_email: 'provider@example.com',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        const current = getStoredDemoBookings();
-        localStorage.setItem(DEMO_BOOKINGS_KEY, JSON.stringify([newBooking, ...current]));
-        window.dispatchEvent(new CustomEvent('servicenest:booking-created', { detail: newBooking }));
-        return newBooking;
+    if (!isStaticOrOffline()) {
+      try {
+        const { booking } = await request('/bookings', {
+          method: 'POST',
+          data: details,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        });
+        return booking;
+      } catch (error) {
+        if (error.cause?.response?.status === 400 || error.cause?.response?.status === 409) {
+          throw error;
+        }
       }
-      throw error;
     }
+
+    const user = readAuthSession()?.user;
+    const allServices = getAllMergedServices();
+    const matchedService = allServices.find((s) => String(s.id) === String(details.serviceId));
+    const method = details.paymentMethod || 'cash';
+    const isOnlinePaid = ['upi', 'netbanking', 'razorpay'].includes(method);
+    const txnId = isOnlinePaid
+      ? `TXN-${method.toUpperCase()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+      : null;
+
+    const newBooking = {
+      id: `demo-booking-${Date.now()}`,
+      customer_id: user?.id || 'demo-customer-1',
+      customer_name: user?.name || 'Demo Customer',
+      customer_email: user?.email || 'customer@example.com',
+      customer_phone: user?.phone || '+1 555-0199',
+      customer_address: details.address || user?.address || '123 Market St',
+      provider_id: matchedService?.provider_id || '1',
+      provider_name: matchedService?.provider_name || 'Service Professional',
+      service_id: details.serviceId,
+      service_title: matchedService?.title || 'Home Service',
+      category_name: matchedService?.category_name || 'Service',
+      status: 'accepted',
+      payment_status: isOnlinePaid ? 'paid' : 'pending',
+      payment_method: method,
+      transaction_id: txnId,
+      payment_bank: details.bankName || '',
+      payment_upi: details.upiId ? maskUpiId(details.upiId) : '',
+      payment_account_masked: details.accountNumber ? maskAccountNumber(details.accountNumber) : '',
+      paid_at: isOnlinePaid ? new Date().toISOString() : null,
+      total_amount: Math.round((details.hours || 1) * (matchedService?.price_per_hour || 45)),
+      hours: details.hours || 1,
+      scheduled_date: details.appointmentAt,
+      appointment_at: details.appointmentAt,
+      address: details.address || user?.address || '123 Market St',
+      notes: details.notes || '',
+      counterpart_name: matchedService?.provider_name || 'Service Professional',
+      counterpart_phone: '+1 555-0100',
+      counterpart_email: 'provider@example.com',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const current = getStoredDemoBookings();
+    localStorage.setItem(DEMO_BOOKINGS_KEY, JSON.stringify([newBooking, ...current]));
+    window.dispatchEvent(new CustomEvent('servicenest:booking-created', { detail: newBooking }));
+    return newBooking;
   },
   updateBookingPayment: async (bookingId, paymentData) => {
     const current = getStoredDemoBookings();
@@ -414,13 +464,19 @@ export const api = {
     const hourlyRate = Number(details.hourlyRate) || Number(user?.providerProfile?.hourly_rate) || 45;
 
     let serviceToSave;
-    try {
-      const { service } = await request('/provider/services', {
-        method: 'POST',
-        data: details,
-      });
-      serviceToSave = service;
-    } catch {
+    if (!isStaticOrOffline()) {
+      try {
+        const { service } = await request('/provider/services', {
+          method: 'POST',
+          data: details,
+        });
+        serviceToSave = service;
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!serviceToSave) {
       serviceToSave = {
         id: `svc-${Date.now()}`,
         provider_id: providerId,
