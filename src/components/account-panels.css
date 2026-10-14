@@ -8,6 +8,9 @@
 .panel-error { margin-top: 10px; }
 .panel-empty { padding: 24px 8px; color: var(--ink-soft); }
 .record-list { display: grid; gap: 12px; margin-top: 16px; }
+.history-tabs { display: flex; gap: 8px; margin-top: 18px; border-bottom: 1px solid var(--line); }
+.history-tabs button { padding: 9px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-soft); font-weight: 650; }
+.history-tabs button.active { border-color: var(--teal); color: var(--teal-dark); }
 .record-card { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
 .record-card p { color: var(--ink-soft); font-size: .9rem; overflow-wrap: anywhere; }
 .record-card-heading, .record-card-footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }

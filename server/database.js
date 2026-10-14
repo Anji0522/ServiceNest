@@ -67,14 +67,21 @@ database.exec(`
   CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
     customer_id TEXT NOT NULL REFERENCES users(id),
+    provider_id TEXT,
     service_id INTEGER NOT NULL REFERENCES services(id),
     appointment_at TEXT NOT NULL,
+    scheduled_date TEXT,
     address TEXT NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
     hours REAL NOT NULL CHECK (hours > 0),
     total_amount REAL NOT NULL,
-    status TEXT NOT NULL DEFAULT 'confirmed',
-    created_at TEXT NOT NULL
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'accepted', 'in_progress', 'completed', 'cancelled')),
+    payment_status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (payment_status IN ('pending', 'paid', 'failed')),
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
   );
   CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
@@ -82,8 +89,17 @@ database.exec(`
     amount REAL NOT NULL,
     currency TEXT NOT NULL DEFAULT 'INR',
     payment_method TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
+    razorpay_order_id TEXT,
+    razorpay_payment_id TEXT,
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS payment_webhook_events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    received_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS booking_messages (
     id TEXT PRIMARY KEY,
@@ -96,6 +112,52 @@ database.exec(`
     ON booking_messages (booking_id, created_at);
 `);
 
+const ensureColumn = (table, column, definition) => {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((entry) => entry.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+};
+
+ensureColumn('bookings', 'provider_id', 'TEXT');
+ensureColumn('bookings', 'scheduled_date', 'TEXT');
+ensureColumn('bookings', 'payment_status', "TEXT NOT NULL DEFAULT 'pending'");
+ensureColumn('bookings', 'idempotency_key', 'TEXT');
+ensureColumn('bookings', 'updated_at', 'TEXT');
+ensureColumn('payments', 'razorpay_order_id', 'TEXT');
+ensureColumn('payments', 'razorpay_payment_id', 'TEXT');
+ensureColumn('payments', 'idempotency_key', 'TEXT');
+ensureColumn('payments', 'updated_at', 'TEXT');
+database.exec(`
+  UPDATE bookings
+  SET provider_id = (SELECT provider_id FROM services WHERE services.id = bookings.service_id)
+  WHERE provider_id IS NULL;
+  UPDATE bookings SET scheduled_date = appointment_at WHERE scheduled_date IS NULL;
+  UPDATE bookings SET status = 'accepted' WHERE status = 'confirmed';
+  UPDATE bookings
+  SET payment_status = COALESCE(
+    (SELECT status FROM payments WHERE payments.booking_id = bookings.id),
+    payment_status
+  );
+  CREATE TRIGGER IF NOT EXISTS bookings_status_insert
+  BEFORE INSERT ON bookings
+  WHEN NEW.status NOT IN ('pending', 'accepted', 'in_progress', 'completed', 'cancelled')
+  BEGIN SELECT RAISE(ABORT, 'Invalid booking status'); END;
+  CREATE TRIGGER IF NOT EXISTS bookings_status_update
+  BEFORE UPDATE OF status ON bookings
+  WHEN NEW.status NOT IN ('pending', 'accepted', 'in_progress', 'completed', 'cancelled')
+  BEGIN SELECT RAISE(ABORT, 'Invalid booking status'); END;
+  CREATE INDEX IF NOT EXISTS bookings_customer_created ON bookings(customer_id, created_at);
+  CREATE INDEX IF NOT EXISTS bookings_provider_created ON bookings(provider_id, created_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS bookings_idempotency_unique
+    ON bookings(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS payments_idempotency_unique
+    ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS payments_razorpay_order_unique
+    ON payments(razorpay_order_id) WHERE razorpay_order_id IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS payments_razorpay_payment_unique
+    ON payments(razorpay_payment_id) WHERE razorpay_payment_id IS NOT NULL;
+`);
 database.exec('CREATE INDEX IF NOT EXISTS users_phone_lookup ON users(phone)');
 database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
 

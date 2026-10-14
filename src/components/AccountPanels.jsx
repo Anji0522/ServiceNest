@@ -7,10 +7,36 @@ const toLocalInputValue = (date) => {
   return local.toISOString().slice(0, 16);
 };
 
+const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
+  if (window.Razorpay) {
+    resolve();
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.async = true;
+  script.onload = () => resolve();
+  script.onerror = () => reject(new Error('Could not load secure checkout. Please try again.'));
+  document.body.appendChild(script);
+});
+
 export const BookingDialog = ({ service, user, onClose, onBooked }) => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [hours, setHours] = useState(1);
+  const idempotencyStorageKey = `servicenest_booking_intent_${user.id}_${service.id}`;
+  const [bookingIntent, setBookingIntent] = useState(() => {
+    const saved = localStorage.getItem(idempotencyStorageKey);
+    if (saved) {
+      try {
+        const intent = JSON.parse(saved);
+        if (intent?.idempotencyKey) return intent;
+      } catch {
+        return { idempotencyKey: saved, details: null };
+      }
+    }
+    return { idempotencyKey: crypto.randomUUID().replaceAll('-', ''), details: null };
+  });
+  const [hours, setHours] = useState(bookingIntent.details?.hours || 1);
   const [appointmentBounds] = useState(() => {
     const now = Date.now();
     return {
@@ -25,14 +51,63 @@ export const BookingDialog = ({ service, user, onClose, onBooked }) => {
     setSubmitting(true);
     const form = new FormData(event.currentTarget);
     try {
-      const booking = await api.createBooking({
+      const details = {
         serviceId: service.id,
         appointmentAt: new Date(form.get('appointmentAt')).toISOString(),
         hours: Number(form.get('hours')),
         address: form.get('address'),
         notes: form.get('notes'),
-        paymentMethod: 'cash',
-      });
+      };
+      const paymentMethod = form.get('paymentMethod');
+      const intent = {
+        idempotencyKey: bookingIntent.idempotencyKey,
+        details: { ...details, paymentMethod },
+      };
+      localStorage.setItem(idempotencyStorageKey, JSON.stringify(intent));
+      setBookingIntent(intent);
+      if (paymentMethod === 'razorpay') {
+        const order = await api.createBookingOrder(details, bookingIntent.idempotencyKey);
+        if (order.booking.payment_status === 'paid') {
+          localStorage.removeItem(idempotencyStorageKey);
+          onBooked(order.booking);
+          return;
+        }
+        if (!order.razorpay) {
+          throw new Error('This idempotency key is already associated with a booking without a payment order. Open booking history to review it.');
+        }
+        await loadRazorpayCheckout();
+        const checkout = new window.Razorpay({
+          key: order.razorpay.keyId,
+          order_id: order.razorpay.orderId,
+          amount: order.razorpay.amount,
+          currency: order.razorpay.currency,
+          name: 'ServiceNest',
+          description: service.title,
+          prefill: { name: user.name, email: user.email, contact: user.phone },
+          handler: async (paymentResult) => {
+            try {
+              await api.verifyPayment(paymentResult);
+              localStorage.removeItem(idempotencyStorageKey);
+              onBooked(order.booking);
+            } catch (verificationError) {
+              setError(`${verificationError.message} Payment confirmation will also be checked securely by the payment provider.`);
+              setSubmitting(false);
+            }
+          },
+          modal: {
+            ondismiss: () => setSubmitting(false),
+          },
+          theme: { color: '#138a82' },
+        });
+        checkout.on('payment.failed', (paymentFailure) => {
+          setError(paymentFailure.error?.description || 'Payment was not completed. Your booking remains unpaid.');
+          setSubmitting(false);
+        });
+        checkout.open();
+        return;
+      }
+      const booking = await api.createBooking({ ...details, paymentMethod: 'cash' }, bookingIntent.idempotencyKey);
+      localStorage.removeItem(idempotencyStorageKey);
       onBooked(booking);
     } catch (requestError) {
       setError(requestError.message);
@@ -57,7 +132,9 @@ export const BookingDialog = ({ service, user, onClose, onBooked }) => {
               name="appointmentAt"
               type="datetime-local"
               min={appointmentBounds.min}
-              defaultValue={appointmentBounds.initial}
+              defaultValue={bookingIntent.details?.appointmentAt
+                ? toLocalInputValue(new Date(bookingIntent.details.appointmentAt))
+                : appointmentBounds.initial}
               required
             />
           </label>
@@ -67,21 +144,22 @@ export const BookingDialog = ({ service, user, onClose, onBooked }) => {
           </label>
           <label>
             Payment method
-            <select name="paymentMethod" defaultValue="cash" disabled>
+            <select name="paymentMethod" defaultValue={bookingIntent.details?.paymentMethod || 'cash'}>
               <option value="cash">Cash after service</option>
+              <option value="razorpay">Pay securely with Razorpay</option>
             </select>
           </label>
           <label className="account-form-wide">
             Service address
-            <input name="address" defaultValue={user.address} maxLength="500" required />
+            <input name="address" defaultValue={bookingIntent.details?.address || user.address} maxLength="500" required />
           </label>
           <label className="account-form-wide">
             Notes for the provider (optional)
-            <textarea name="notes" rows="3" maxLength="1000" placeholder="Describe the work or access instructions" />
+            <textarea name="notes" rows="3" maxLength="1000" defaultValue={bookingIntent.details?.notes || ''} placeholder="Describe the work or access instructions" />
           </label>
           <p className="payment-notice account-form-wide">
-            Estimated total: ₹{(service.price_per_hour * hours).toFixed(2)}. Payment is recorded as pending and collected after the service.
-            No card or bank details are collected.
+            Estimated total: ₹{(service.price_per_hour * hours).toFixed(2)}.
+            Online payment status is confirmed by the payment webhook. Card and bank details are handled by Razorpay, not stored by ServiceNest.
           </p>
           {error && <p className="form-error account-form-wide" role="alert">{error}</p>}
           <button className="primary-action account-form-wide" type="submit" disabled={submitting}>
@@ -99,7 +177,7 @@ export const BookingsPanel = ({ user, onClose, onMessage }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getBookings()
+    api.getMyBookingHistory()
       .then(setBookings)
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
@@ -107,35 +185,70 @@ export const BookingsPanel = ({ user, onClose, onMessage }) => {
 
   return (
     <PanelFrame title="My bookings" eyebrow="YOUR SERVICE HISTORY" onClose={onClose}>
-      {error ? <p className="form-error" role="alert">{error}</p> : loading ? (
-        <p className="panel-empty">Loading your bookings…</p>
-      ) : bookings.length === 0 ? (
-        <p className="panel-empty">No bookings yet. Choose a service to schedule your first visit.</p>
+      <BookingHistory bookings={bookings} error={error} loading={loading} user={user} onMessage={onMessage} />
+      <p className="panel-footnote">
+        {user.name} · {user.email} · {user.phone} · {user.address}
+      </p>
+    </PanelFrame>
+  );
+};
+
+const BookingHistory = ({ bookings, error, loading, user, onMessage }) => {
+  const [activeTab, setActiveTab] = useState('Upcoming');
+  const statusesByTab = {
+    Upcoming: ['pending', 'accepted', 'in_progress', 'confirmed'],
+    Completed: ['completed'],
+    Cancelled: ['cancelled'],
+  };
+  const filteredBookings = bookings.filter((booking) => statusesByTab[activeTab].includes(booking.status));
+
+  if (error) return <p className="form-error" role="alert">{error}</p>;
+  if (loading) return <p className="panel-empty">Loading booking history…</p>;
+
+  return (
+    <>
+      <div className="history-tabs" role="tablist" aria-label="Filter bookings">
+        {Object.keys(statusesByTab).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            className={activeTab === tab ? 'active' : ''}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+      {filteredBookings.length === 0 ? (
+        <p className="panel-empty">No {activeTab.toLowerCase()} bookings.</p>
       ) : (
         <ul className="record-list">
-          {bookings.map((booking) => (
+          {filteredBookings.map((booking) => (
             <li className="record-card" key={booking.id}>
               <div className="record-card-heading">
-                <div><h3>{booking.service_title}</h3><p>{booking.provider_name}</p></div>
-                <span className="record-status">{booking.status}</span>
+                <div>
+                  <h3>{booking.service_title}</h3>
+                  <p>{booking.counterpart_name || (user.role === 'provider' ? 'Customer' : 'Service provider')}</p>
+                </div>
+                <span className="record-status">{booking.status.replaceAll('_', ' ')}</span>
               </div>
-              <p>{new Date(booking.appointment_at).toLocaleString()}</p>
-              <p>{booking.address}</p>
+              <p>{new Date(booking.scheduled_date || booking.appointment_at).toLocaleString()}</p>
+              {booking.counterpart_phone && <p>{booking.counterpart_phone}</p>}
               <div className="record-card-footer">
-                <strong>₹{booking.total_amount} · {booking.hours}h</strong>
-                <span>Cash · Payment {booking.payment_status}</span>
+                <strong>₹{booking.total_amount}</strong>
+                <span>Payment {booking.payment_status}</span>
               </div>
+              {booking.counterpart_email && <p>{booking.counterpart_email}</p>}
               <button className="message-action" type="button" onClick={() => onMessage(booking)}>
-                Message provider
+                Message {user.role === 'provider' ? 'customer' : 'provider'}
               </button>
             </li>
           ))}
         </ul>
       )}
-      <p className="panel-footnote">
-        {user.name} · {user.email} · {user.phone} · {user.address}
-      </p>
-    </PanelFrame>
+    </>
   );
 };
 
@@ -147,7 +260,7 @@ export const ProviderDashboard = ({ user, onClose, onServiceCreated, onMessage }
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.getProviderServices(), api.getProviderBookings(), api.getProviderProfile()])
+    Promise.all([api.getProviderServices(), api.getMyBookingHistory(), api.getProviderProfile()])
       .then(([providerServices, providerBookings, providerProfile]) => {
         setServices(providerServices);
         setBookings(providerBookings);
@@ -200,21 +313,8 @@ export const ProviderDashboard = ({ user, onClose, onServiceCreated, onMessage }
       {error && <p className="form-error panel-error" role="alert">{error}</p>}
       <h3 className="panel-section-title">Your listings <span>{services.length}</span></h3>
       {services.length > 0 && <ul className="listing-chips">{services.map((service) => <li key={service.id}>{service.title} · ₹{service.price_per_hour}/hr</li>)}</ul>}
-      <h3 className="panel-section-title">Customer requests <span>{bookings.length}</span></h3>
-      {bookings.length === 0 ? <p className="panel-empty">No customer bookings for your services yet.</p> : (
-        <ul className="record-list">
-          {bookings.map((booking) => (
-            <li className="record-card" key={booking.id}>
-              <div className="record-card-heading"><div><h3>{booking.service_title}</h3><p>{booking.customer_name} · {booking.customer_phone}</p></div><span className="record-status">{booking.status}</span></div>
-              <p>{new Date(booking.appointment_at).toLocaleString()} · {booking.address}</p>
-              <div className="record-card-footer"><strong>₹{booking.total_amount}</strong><span>Payment {booking.payment_status}</span></div>
-              <button className="message-action" type="button" onClick={() => onMessage(booking)}>
-                Message customer
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <h3 className="panel-section-title">Booking history <span>{bookings.length}</span></h3>
+      <BookingHistory bookings={bookings} error={error} loading={!profile} user={user} onMessage={onMessage} />
     </PanelFrame>
   );
 };

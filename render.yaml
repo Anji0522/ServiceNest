@@ -17,6 +17,12 @@ services:
         value: /var/data/servicenest.sqlite
       - key: JWT_SECRET
         generateValue: true
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
       - key: CORS_ORIGINS
         value: https://anji0522.github.io,https://servicenet.com,https://www.servicenet.com
       - key: NODE_ENV

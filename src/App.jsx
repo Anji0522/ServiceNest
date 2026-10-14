@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react';
 import Home from './components/Home';
 import ServiceDetails from './components/ServiceDetails';
 import Login from './components/Login';
-import { api, hasSession } from './lib/api';
+import { api } from './lib/api';
 import { BookingConversation, BookingDialog, BookingsPanel, ProviderDashboard } from './components/AccountPanels';
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './context/auth-context';
+import { navigateToRoute, routePath } from './lib/routes';
+
+const CUSTOMER_ROLES = ['customer'];
+const PROVIDER_ROLES = ['provider'];
 
 const workersList = [
   { id: "allservices", category_id: 0, service: "All Services" },
@@ -200,18 +206,30 @@ const INITIAL_SERVICES = [
 
 
 const App = () => {
+  const { user, hydrated, logout } = useAuth();
   const [activeCategory, setActiveCategory] = useState(0); // 0 = All Services
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recommended');
   const [services, setServices] = useState(INITIAL_SERVICES);
-  const [user, setUser] = useState(null);
   const [loginRole, setLoginRole] = useState('customer');
-  const [showLogin, setShowLogin] = useState(false);
+  const [route, setRoute] = useState(routePath);
+  const [showLogin, setShowLogin] = useState(routePath() === '/login');
   const [pendingService, setPendingService] = useState(null);
   const [bookingService, setBookingService] = useState(null);
   const [conversationBooking, setConversationBooking] = useState(null);
   const [panel, setPanel] = useState('');
   const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const current = routePath();
+      setRoute(current);
+      setShowLogin(current === '/login');
+      setPanel(current === '/customer/bookings' ? 'bookings' : current === '/provider/dashboard' ? 'provider' : '');
+    };
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, []);
 
   useEffect(() => {
     if (import.meta.env.VITE_STATIC_DEMO !== 'true') {
@@ -225,14 +243,6 @@ const App = () => {
         });
     }
 
-    if (import.meta.env.VITE_STATIC_DEMO !== 'true' && hasSession()) {
-      api.getCurrentUser()
-        .then(setUser)
-        .catch((error) => {
-          api.logout().catch(() => {});
-          setNotice(error.message);
-        });
-    }
   }, []);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -265,13 +275,16 @@ const App = () => {
   const openLogin = (role = 'customer') => {
     setLoginRole(role);
     setShowLogin(true);
+    navigateToRoute('/login');
   };
 
   const handleAuthenticated = (authenticatedUser) => {
-    setUser(authenticatedUser);
     setShowLogin(false);
     if (pendingService && authenticatedUser.role === 'customer') {
       setBookingService(pendingService);
+      navigateToRoute('/');
+    } else {
+      navigateToRoute(authenticatedUser.role === 'provider' ? '/provider/dashboard' : '/customer/bookings');
     }
     setPendingService(null);
     setNotice('');
@@ -292,7 +305,9 @@ const App = () => {
     if (!user) {
       openLogin(role);
     } else if (user.role === role) {
-      setPanel(role === 'provider' ? 'provider' : '');
+      const path = role === 'provider' ? '/provider/dashboard' : '/customer/bookings';
+      setPanel(role === 'provider' ? 'provider' : 'bookings');
+      navigateToRoute(path);
     } else {
       setNotice(`You are signed in as a ${user.role}. Sign out before switching account types.`);
     }
@@ -300,19 +315,21 @@ const App = () => {
 
   const handleSignOut = async () => {
     try {
-      await api.logout();
+      await logout();
     } catch (error) {
       setNotice(error.message);
     } finally {
-      setUser(null);
       setPanel('');
       setConversationBooking(null);
+      navigateToRoute('/');
     }
   };
 
   const handleServiceCreated = (service) => {
     setServices((current) => [service, ...current]);
   };
+
+  if (!hydrated) return <div className="app-shell" aria-busy="true">Loading your session…</div>;
 
   return (
     <div className="app-shell">
@@ -330,17 +347,21 @@ const App = () => {
         onSignOut={handleSignOut}
         onShowBookings={() => {
           if (!user) openLogin('customer');
-          else setPanel(user.role === 'provider' ? 'provider' : 'bookings');
+          else {
+            setPanel(user.role === 'provider' ? 'provider' : 'bookings');
+            navigateToRoute(user.role === 'provider' ? '/provider/dashboard' : '/customer/bookings');
+          }
         }}
         onRoleSelect={handleRoleSelect}
       />
       <ServiceDetails services={filteredServices} onBookService={handleBookingRequest} />
-      {showLogin && (
+      {(showLogin || route === '/login') && (
         <Login
           initialRole={loginRole}
           onClose={() => {
             setShowLogin(false);
             setPendingService(null);
+            navigateToRoute('/');
           }}
           onAuthenticated={handleAuthenticated}
         />
@@ -350,23 +371,30 @@ const App = () => {
           service={bookingService}
           user={user}
           onClose={() => setBookingService(null)}
-          onBooked={() => {
+          onBooked={(booking) => {
             setBookingService(null);
             setPanel('bookings');
-            setNotice('Booking confirmed. Payment is pending and due after the service.');
+            navigateToRoute('/customer/bookings');
+            setNotice(booking.payment_method === 'razorpay'
+              ? 'Payment confirmation received. Your booking is ready for the provider.'
+              : 'Booking received. Payment is pending and due after the service.');
           }}
         />
       )}
-      {panel === 'bookings' && user?.role === 'customer' && (
-        <BookingsPanel user={user} onClose={() => setPanel('')} onMessage={setConversationBooking} />
+      {(panel === 'bookings' || route === '/customer/bookings') && (
+        <ProtectedRoute allowedRoles={CUSTOMER_ROLES}>
+          <BookingsPanel user={user} onClose={() => { setPanel(''); navigateToRoute('/'); }} onMessage={setConversationBooking} />
+        </ProtectedRoute>
       )}
-      {panel === 'provider' && user?.role === 'provider' && (
-        <ProviderDashboard
-          user={user}
-          onClose={() => setPanel('')}
-          onServiceCreated={handleServiceCreated}
-          onMessage={setConversationBooking}
-        />
+      {(panel === 'provider' || route === '/provider/dashboard') && (
+        <ProtectedRoute allowedRoles={PROVIDER_ROLES}>
+          <ProviderDashboard
+            user={user}
+            onClose={() => { setPanel(''); navigateToRoute('/'); }}
+            onServiceCreated={handleServiceCreated}
+            onMessage={setConversationBooking}
+          />
+        </ProtectedRoute>
       )}
       {conversationBooking && user && (
         <BookingConversation

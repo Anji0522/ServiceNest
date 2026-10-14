@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading ServiceNest</title>
+  </head>
+  <body>
+    <script>
+      const root = location.pathname === '/ServiceNET' || location.pathname.startsWith('/ServiceNET/')
+        ? '/ServiceNET/'
+        : '/';
+      sessionStorage.setItem('servicenest_pages_route', JSON.stringify({
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      }));
+      location.replace(`${root}?pages-route=1`);
+    </script>
+  </body>
+</html>
