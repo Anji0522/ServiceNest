@@ -31,7 +31,8 @@ jobs:
       - name: Build site
         run: npm run build
         env:
-          VITE_STATIC_DEMO: 'true'
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_STATIC_DEMO: ${{ vars.VITE_API_URL == '' && 'true' || 'false' }}
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:

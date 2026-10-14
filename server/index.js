@@ -1,11 +1,17 @@
 import { createServer } from 'node:http';
 import { Buffer } from 'node:buffer';
-import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { database, transaction } from './database.js';
 
-const port = Number(process.env.API_PORT || 3001);
-const sessions = new Map();
+const port = Number(process.env.PORT || process.env.API_PORT || 3001);
+const host = process.env.HOST || '127.0.0.1';
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
 const categories = new Map([
   [1, 'Electrician'], [2, 'Plumber'], [3, 'AC Repair'],
   [4, 'Cleaning'], [5, 'Carpentry'], [6, 'Painting'],
@@ -64,17 +70,30 @@ const requiredString = (value, label, maxLength = 300) => {
   return value.trim();
 };
 
+const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+
 const currentUser = (request) => {
-  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
-  const id = token && sessions.get(token);
-  return id ? database.prepare('SELECT id, email, role, name, phone, address, created_at FROM users WHERE id = ?').get(id) : null;
+  const token = request.headers.authorization?.match(/^Bearer\s+([a-f\d]{64})$/i)?.[1];
+  if (!token) return null;
+  return database.prepare(`
+    SELECT u.id, u.email, u.role, u.name, u.phone, u.address, u.created_at
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.token_hash = ? AND s.expires_at > ?
+  `).get(hashToken(token), new Date().toISOString()) || null;
 };
 
 const publicService = (service) => ({ ...service, verified: Boolean(service.verified) });
 
 const createSession = (user) => {
   const token = randomBytes(32).toString('hex');
-  sessions.set(token, user.id);
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+  database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(createdAt.toISOString());
+  database.prepare(`
+    INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
+    VALUES (?, ?, ?, ?)
+  `).run(hashToken(token), user.id, createdAt.toISOString(), expiresAt.toISOString());
   return { token, user: database.prepare('SELECT id, email, role, name, phone, address, created_at FROM users WHERE id = ?').get(user.id) };
 };
 
@@ -162,8 +181,8 @@ const handle = async (request, response) => {
   }
 
   if (request.method === 'POST' && pathname === '/api/auth/logout') {
-    const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
-    if (token) sessions.delete(token);
+    const token = request.headers.authorization?.match(/^Bearer\s+([a-f\d]{64})$/i)?.[1];
+    if (token) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
     return send(response, 200, { message: 'Signed out.' });
   }
 
@@ -336,6 +355,20 @@ const handle = async (request, response) => {
 };
 
 const server = createServer((request, response) => {
+  const origin = request.headers.origin;
+  if (origin && !allowedOrigins.has(origin)) {
+    return send(response, 403, { error: 'This website is not allowed to access the API.' });
+  }
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    response.setHeader('Vary', 'Origin');
+  }
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204);
+    return response.end();
+  }
   handle(request, response).catch((error) => {
     console.error(`${request.method} ${request.url}:`, error);
     send(response, error instanceof HttpError ? error.status : 500, {
@@ -344,8 +377,8 @@ const server = createServer((request, response) => {
   });
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`ServiceNest API listening on http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  console.log(`ServiceNest API listening on port ${port}`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

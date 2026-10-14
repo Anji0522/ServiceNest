@@ -1,4 +1,6 @@
-const API_ROOT = '/api';
+const API_ROOT = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api`
+  : '/api';
 const TOKEN_KEY = 'servicenest_token';
 
 export const hasSession = () => Boolean(localStorage.getItem(TOKEN_KEY));

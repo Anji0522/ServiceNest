@@ -6,7 +6,7 @@ ServiceNest is a React service marketplace with a Node.js API and a local SQLite
 
 [Open the ServiceNest demo on GitHub Pages](https://anji0522.github.io/ServiceNET/).
 
-The hosted demo displays the sample service catalogue. Sign-in, bookings, provider tools, and messaging require the API, which you can run locally using the instructions below.
+The hosted demo displays the sample catalogue until the Render API is deployed and the `VITE_API_URL` GitHub Actions repository variable is configured. Local development runs the API alongside the frontend.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ The API creates `data/servicenest.sqlite` on first start and seeds the catalogue
 
 ## Included features
 
-- Customer and provider account registration and sign-in. Passwords are salted and hashed with Node's `scrypt`; browser sessions use a bearer token in local storage.
+- Customer and provider account registration and sign-in. Passwords are salted and hashed with Node's `scrypt`; hashed browser sessions are stored in the database and remain valid for 30 days, including across server restarts.
 - Customer contact and service address details, provider profiles, service listings, catalogue search, category filtering, and sorting.
 - Customer bookings with appointment time, service address, notes, duration, and an itemized hourly total.
 - Persistent payment records for cash after service. Online/card payments are intentionally not enabled; connect a payment processor before accepting electronic payment details.
@@ -41,7 +41,17 @@ The API creates `data/servicenest.sqlite` on first start and seeds the catalogue
 - `GET|POST /api/bookings`
 - `GET|POST /api/bookings/:id/messages`
 
-Authenticated requests use `Authorization: Bearer <token>`. The local session store is in memory, so users sign in again after restarting the API. For production, configure HTTPS, persistent/revocable sessions, request rate limiting, database backups, and an approved payment provider; do not expose the development server directly to the internet.
+Authenticated requests use a bearer token. For production, configure HTTPS, request rate limiting, database backups, and an approved payment provider; do not expose the development server directly to the internet.
+
+## Deploy the API with persistent storage
+
+1. Sign in to Render and create a new **Blueprint** from this GitHub repository. Render reads `render.yaml` to create the API service and attach a persistent disk at `/var/data`. The Starter web service and disk are paid Render resources; the disk preserves customer accounts, provider profiles, listings, bookings, payments, and messages across restarts and deployments.
+2. After Render finishes deploying, copy the service's public URL (for example, `https://servicenet-api-anji0522.onrender.com`) into the GitHub repository variable **Settings → Secrets and variables → Actions → Variables** as `VITE_API_URL`.
+3. Re-run the **Deploy to GitHub Pages** workflow, or push a new commit. The site will then use the hosted API for registration, sign-in, bookings, provider tools, and messages.
+
+The local API allows local development origins; the Render Blueprint restricts the deployed API to the GitHub Pages origin. Set `CORS_ORIGINS` on Render to a comma-separated list of exact trusted origins if the frontend is served from another domain. Do not put credentials or API secrets in `VITE_API_URL` or other `VITE_` variables; frontend build variables are public.
+
+The API stores customer contact details and service addresses, plus booking and conversation records. Passwords are stored as salted hashes; payment card or bank data is not collected. Restrict access to the Render project and disk, use HTTPS, and establish appropriate privacy, retention, and backup practices before collecting real customer data.
 
 ## Checks
 

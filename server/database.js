@@ -34,6 +34,13 @@ database.exec(`
     address TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions (expires_at);
   CREATE TABLE IF NOT EXISTS provider_profiles (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     business_name TEXT NOT NULL,
@@ -88,6 +95,8 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS booking_messages_booking_created
     ON booking_messages (booking_id, created_at);
 `);
+
+database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
 
 const seedServices = [
   [101, '1', 'David Miller', 1, 'Electrician', 'Complete Home Electrical Wiring & Inspection', 'Certified master electrician for switchboard fixes, short-circuit diagnostics, fixture upgrades, and full panel rewiring.', 45, 'Downtown & Metro East', 4.9, 38, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', 1],

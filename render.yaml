@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: servicenet-api-anji0522
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run api
+    healthCheckPath: /api/health
+    disk:
+      name: servicenet-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: SERVICENEST_DB_PATH
+        value: /var/data/servicenest.sqlite
+      - key: CORS_ORIGINS
+        value: https://anji0522.github.io
+      - key: NODE_ENV
+        value: production
