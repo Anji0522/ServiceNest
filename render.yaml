@@ -16,6 +16,6 @@ services:
       - key: SERVICENEST_DB_PATH
         value: /var/data/servicenest.sqlite
       - key: CORS_ORIGINS
-        value: https://anji0522.github.io
+        value: https://anji0522.github.io,https://servicenet.com,https://www.servicenet.com
       - key: NODE_ENV
         value: production

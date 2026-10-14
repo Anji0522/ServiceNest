@@ -49,9 +49,22 @@ Authenticated requests use a bearer token. For production, configure HTTPS, requ
 2. After Render finishes deploying, copy the service's public URL (for example, `https://servicenet-api-anji0522.onrender.com`) into the GitHub repository variable **Settings → Secrets and variables → Actions → Variables** as `VITE_API_URL`.
 3. Re-run the **Deploy to GitHub Pages** workflow, or push a new commit. The site will then use the hosted API for registration, sign-in, bookings, provider tools, and messages.
 
-The local API allows local development origins; the Render Blueprint restricts the deployed API to the GitHub Pages origin. Set `CORS_ORIGINS` on Render to a comma-separated list of exact trusted origins if the frontend is served from another domain. Do not put credentials or API secrets in `VITE_API_URL` or other `VITE_` variables; frontend build variables are public.
+The local API allows local development origins; the Render Blueprint restricts the deployed API to the GitHub Pages and ServiceNest custom domains. Set `CORS_ORIGINS` on Render to a comma-separated list of exact trusted origins if the frontend is served from another domain. Do not put credentials or API secrets in `VITE_API_URL` or other `VITE_` variables; frontend build variables are public.
 
 The API stores customer contact details and service addresses, plus booking and conversation records. Passwords are stored as salted hashes; payment card or bank data is not collected. Restrict access to the Render project and disk, use HTTPS, and establish appropriate privacy, retention, and backup practices before collecting real customer data.
+
+## Custom-domain DNS
+
+The Pages build publishes `public/CNAME` for `servicenet.com`. At the domain's DNS provider, point the apex domain to GitHub Pages by adding these four `A` records:
+
+| Host | Type | Value |
+| --- | --- | --- |
+| `@` | `A` | `185.199.108.153` |
+| `@` | `A` | `185.199.109.153` |
+| `@` | `A` | `185.199.110.153` |
+| `@` | `A` | `185.199.111.153` |
+
+Optionally point `www` to `anji0522.github.io` with a `CNAME` record. DNS changes can take up to 24 hours to propagate; enable **Enforce HTTPS** in GitHub **Settings → Pages** after the domain verifies.
 
 ## Checks
 
