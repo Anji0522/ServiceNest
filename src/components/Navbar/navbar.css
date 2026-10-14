@@ -3,8 +3,8 @@
 .navbar-container {
   max-width: var(--maxw); margin: 0 auto; padding: 12px var(--gutter);
   display: grid; align-items: center; gap: 12px 20px;
-  grid-template-columns: auto minmax(220px, 1fr) auto auto;
-  grid-template-areas: "brand search role actions";
+  grid-template-columns: auto minmax(220px, 1fr);
+  grid-template-areas: "brand search";
 }
 .brand { grid-area: brand; display: flex; align-items: center; gap: 10px; min-width: 0; animation: fade-in-up .55s both; }
 .brand-logo { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; }
@@ -21,39 +21,25 @@
 .navbar-search-icon { font-size: 1.2rem; color: var(--ink-soft); flex-shrink: 0; }
 .navbar-search-input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; outline: none; }
 
-.navbar-role { grid-area: role; display: flex; background: var(--page); border-radius: 999px; padding: 3px; }
-.role-btn { border: 0; background: transparent; padding: 8px 16px; border-radius: 999px; white-space: nowrap; color: var(--ink-soft); transition: color .2s, background .2s, transform .2s; }
-.role-btn:hover { color: var(--teal-dark); }
-.role-btn.active { background: var(--teal); color: #fff; box-shadow: 0 3px 8px rgba(8, 127, 120, .2); }
-
-.navbar-actions { grid-area: actions; }
-.bookings-btn { border: 1.5px solid var(--teal); background: transparent; color: var(--teal-dark); padding: 9px 18px; border-radius: 999px; font-weight: 650; white-space: nowrap; transition: color .2s, background .2s, transform .2s, box-shadow .2s; }
-.bookings-btn:hover { background: var(--teal); color: #fff; transform: translateY(-1px); box-shadow: 0 5px 14px rgba(8, 127, 120, .2); }
-
 /* Tablet & small laptops: search drops to its own row */
 @media (max-width: 960px) {
   .navbar-container {
-    grid-template-columns: 1fr auto auto;
-    grid-template-areas: "brand role actions" "search search search";
+    grid-template-columns: 1fr;
+    grid-template-areas: "brand" "search";
   }
 }
 /* Large phones */
 @media (max-width: 640px) {
   .navbar { position: static; }
   .navbar-container {
-    grid-template-columns: 1fr auto;
-    grid-template-areas: "brand actions" "search search" "role role";
+    grid-template-columns: 1fr;
+    grid-template-areas: "brand" "search";
   }
-  .navbar-role { width: 100%; }
-  .role-btn { flex: 1; }
   .navbar-tagline { display: none; }
-  .bookings-btn { padding: 8px 14px; font-size: .9rem; }
   .search-bar { min-height: 44px; }
 }
 /* Small phones */
 @media (max-width: 380px) {
   .brand-logo { width: 36px; height: 36px; }
   .navbar-title { font-size: 1.1rem; }
-  .bookings-btn { padding: 7px 10px; font-size: .8rem; }
-  .role-btn { padding: 8px 10px; font-size: .88rem; }
 }

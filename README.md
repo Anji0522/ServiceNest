@@ -1,19 +1,40 @@
-# React + Vite
+# ServiceNest
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ServiceNest is a React single-page app for browsing local home-service professionals. The current version is a front-end demo backed by sample data in `src/App.jsx`; it does not include a live booking API, authentication, or provider accounts.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Browse sample electricians, plumbers, HVAC technicians, cleaners, carpenters, and painters.
+- Filter services by category and search by provider, service, description, or service area.
+- Sort listings by hourly price or rating.
+- View provider verification, ratings, reviews, service areas, and sample hourly prices.
 
-## React Compiler
+## Requirements
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+- Node.js compatible with Vite 8
+- npm
 
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
+## Run locally
 
-## Expanding the ESLint configuration
+```sh
+npm ci
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Vite prints the local development URL in the terminal.
+
+## Quality checks
+
+```sh
+npm run lint
+npm run build
+npm run preview
+```
+
+The production site is generated in `dist/`.
+
+## Deployment
+
+GitHub Actions builds and deploys the site to GitHub Pages whenever changes are pushed to `main`. The workflow builds with `npm run build` and publishes `dist/`.
+
+The custom domain is configured as `serviceNET.com` in `public/CNAME`. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source. Configure the domain's DNS with the records GitHub Pages specifies for an apex domain, then enable HTTPS in the Pages settings. DNS changes may take time to propagate.

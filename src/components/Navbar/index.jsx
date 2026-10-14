@@ -39,24 +39,6 @@ const Navbar = ({ searchQuery = '', onSearchChange = () => {} }) => {
                     />
                 </div>
 
-                {/* Role Switcher */}
-                <div className="navbar-role">
-                    <button className="role-btn active">
-                        Customer
-                    </button>
-
-                    <button className="role-btn">
-                        Provider
-                    </button>
-                </div>
-
-                {/* Actions */}
-                <div className="navbar-actions">
-                    <button className="bookings-btn">
-                        My Bookings
-                    </button>
-                </div>
-
             </div>
             </header>
         </div>

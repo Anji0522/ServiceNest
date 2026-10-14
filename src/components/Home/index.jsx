@@ -38,7 +38,7 @@ const Home = (props) => {
             </h1>
 
             <p className="descrreption">
-              Explore rated electricians, plumbers, and technicians. Transparent hourly pricing and instant booking confirmation.
+              Explore rated electricians, plumbers, and technicians with verified profiles and transparent hourly pricing.
             </p>
           </main>
 
