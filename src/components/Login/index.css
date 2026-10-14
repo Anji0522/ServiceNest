@@ -18,4 +18,5 @@
 .primary-action:disabled { cursor: wait; opacity: .7; }
 .account-mode-toggle { margin-top: 18px; color: var(--ink-soft); text-align: center; font-size: .92rem; }
 .account-mode-toggle button { padding: 0; border: 0; background: none; color: var(--teal-dark); font-weight: 700; }
+.account-unavailable { margin-top: 20px; padding: 14px; border-radius: 12px; background: var(--page); color: var(--ink-soft); line-height: 1.55; }
 @media (max-width: 480px) { .account-overlay { padding: 10px; } .account-dialog { padding: 24px 18px; border-radius: 18px; } .account-form { grid-template-columns: 1fr; } .account-form-wide { grid-column: auto; } }

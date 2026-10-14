@@ -3,6 +3,7 @@ import { api, categories } from '../../lib/api';
 import './index.css';
 
 const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
+  const isStaticDemo = import.meta.env.VITE_STATIC_DEMO === 'true';
   const [mode, setMode] = useState('login');
   const [role, setRole] = useState(initialRole);
   const [error, setError] = useState('');
@@ -30,6 +31,26 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
       setIsSubmitting(false);
     }
   };
+
+  if (isStaticDemo) {
+    return (
+      <div className="account-overlay" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}>
+        <section className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title">
+          <button className="dialog-close" type="button" onClick={onClose} aria-label="Close sign in">×</button>
+          <p className="dialog-eyebrow">SERVICENEST ACCOUNT</p>
+          <h2 id="account-title">Accounts unavailable</h2>
+          <p className="dialog-description">
+            Sign-in and account creation need the ServiceNest account service, which is not connected to this demo yet.
+          </p>
+          <p className="account-unavailable" role="status">
+            You can still browse and search the sample services. Please try again after account service setup is complete.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="account-overlay" role="presentation" onMouseDown={(event) => {
