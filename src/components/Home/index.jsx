@@ -14,12 +14,25 @@ const Home = (props) => {
     onSearchChange = () => {},
     sortBy = 'recommended',
     onSortChange = () => {},
+    user = null,
+    onSignIn = () => {},
+    onSignOut = () => {},
+    onShowBookings = () => {},
+    onRoleSelect = () => {},
   } = props;
 
   return (
     <div className="home-page">
       <header className="home-navbar-wrapper">
-        <Navbar searchQuery={searchQuery} onSearchChange={onSearchChange} />
+        <Navbar
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          user={user}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
+          onShowBookings={onShowBookings}
+          onRoleSelect={onRoleSelect}
+        />
       </header>
 
       <div className="hero-section">
@@ -38,7 +51,7 @@ const Home = (props) => {
             </h1>
 
             <p className="descrreption">
-              Explore rated electricians, plumbers, and technicians with verified profiles and transparent hourly pricing.
+              Explore rated electricians, plumbers, and technicians. Transparent hourly pricing and instant booking confirmation.
             </p>
           </main>
 

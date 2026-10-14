@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Home from './components/Home';
 import ServiceDetails from './components/ServiceDetails';
+import Login from './components/Login';
+import { api, hasSession } from './lib/api';
+import { BookingConversation, BookingDialog, BookingsPanel, ProviderDashboard } from './components/AccountPanels';
 
 const workersList = [
   { id: "allservices", category_id: 0, service: "All Services" },
@@ -200,9 +203,38 @@ const App = () => {
   const [activeCategory, setActiveCategory] = useState(0); // 0 = All Services
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recommended');
+  const [services, setServices] = useState(INITIAL_SERVICES);
+  const [user, setUser] = useState(null);
+  const [loginRole, setLoginRole] = useState('customer');
+  const [showLogin, setShowLogin] = useState(false);
+  const [pendingService, setPendingService] = useState(null);
+  const [bookingService, setBookingService] = useState(null);
+  const [conversationBooking, setConversationBooking] = useState(null);
+  const [panel, setPanel] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    api.getServices()
+      .then(({ services: savedServices }) => {
+        setServices(savedServices);
+        setNotice('');
+      })
+      .catch(() => {
+        setNotice('The service API is offline. Showing the sample catalogue; sign-in, bookings, and saved listings require the API server.');
+      });
+
+    if (hasSession()) {
+      api.getCurrentUser()
+        .then(setUser)
+        .catch((error) => {
+          api.logout().catch(() => {});
+          setNotice(error.message);
+        });
+    }
+  }, []);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const filteredServices = INITIAL_SERVICES
+  const filteredServices = services
     .filter((service) => (
       activeCategory === 0 || service.category_id === activeCategory
     ))
@@ -228,8 +260,61 @@ const App = () => {
       return 0;
     });
 
+  const openLogin = (role = 'customer') => {
+    setLoginRole(role);
+    setShowLogin(true);
+  };
+
+  const handleAuthenticated = (authenticatedUser) => {
+    setUser(authenticatedUser);
+    setShowLogin(false);
+    if (pendingService && authenticatedUser.role === 'customer') {
+      setBookingService(pendingService);
+    }
+    setPendingService(null);
+    setNotice('');
+  };
+
+  const handleBookingRequest = (service) => {
+    if (!user) {
+      setPendingService(service);
+      openLogin('customer');
+    } else if (user.role !== 'customer') {
+      setNotice('Sign in with a customer account to book a service.');
+    } else {
+      setBookingService(service);
+    }
+  };
+
+  const handleRoleSelect = (role) => {
+    if (!user) {
+      openLogin(role);
+    } else if (user.role === role) {
+      setPanel(role === 'provider' ? 'provider' : '');
+    } else {
+      setNotice(`You are signed in as a ${user.role}. Sign out before switching account types.`);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await api.logout();
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setUser(null);
+      setPanel('');
+      setConversationBooking(null);
+    }
+  };
+
+  const handleServiceCreated = (service) => {
+    setServices((current) => [service, ...current]);
+  };
+
   return (
     <div className="app-shell">
+      {notice && <p className="app-notice" role="status">{notice}</p>}
       <Home
         workersList={workersList}
         activeCategory={activeCategory}
@@ -238,8 +323,56 @@ const App = () => {
         onSearchChange={setSearchQuery}
         sortBy={sortBy}
         onSortChange={setSortBy}
+        user={user}
+        onSignIn={openLogin}
+        onSignOut={handleSignOut}
+        onShowBookings={() => {
+          if (!user) openLogin('customer');
+          else setPanel(user.role === 'provider' ? 'provider' : 'bookings');
+        }}
+        onRoleSelect={handleRoleSelect}
       />
-      <ServiceDetails services={filteredServices} />
+      <ServiceDetails services={filteredServices} onBookService={handleBookingRequest} />
+      {showLogin && (
+        <Login
+          initialRole={loginRole}
+          onClose={() => {
+            setShowLogin(false);
+            setPendingService(null);
+          }}
+          onAuthenticated={handleAuthenticated}
+        />
+      )}
+      {bookingService && user?.role === 'customer' && (
+        <BookingDialog
+          service={bookingService}
+          user={user}
+          onClose={() => setBookingService(null)}
+          onBooked={() => {
+            setBookingService(null);
+            setPanel('bookings');
+            setNotice('Booking confirmed. Payment is pending and due after the service.');
+          }}
+        />
+      )}
+      {panel === 'bookings' && user?.role === 'customer' && (
+        <BookingsPanel user={user} onClose={() => setPanel('')} onMessage={setConversationBooking} />
+      )}
+      {panel === 'provider' && user?.role === 'provider' && (
+        <ProviderDashboard
+          user={user}
+          onClose={() => setPanel('')}
+          onServiceCreated={handleServiceCreated}
+          onMessage={setConversationBooking}
+        />
+      )}
+      {conversationBooking && user && (
+        <BookingConversation
+          booking={conversationBooking}
+          user={user}
+          onClose={() => setConversationBooking(null)}
+        />
+      )}
     </div>
   );
 };

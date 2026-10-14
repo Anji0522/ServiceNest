@@ -1,6 +1,6 @@
 import "./serviceDetails.css";
 
-const ServiceDetails = ({ services = [] }) => {
+const ServiceDetails = ({ services = [], onBookService = () => {} }) => {
   return (
     <div className="service-details-container">
       <div className="service-details-header">
@@ -17,11 +17,17 @@ const ServiceDetails = ({ services = [] }) => {
         <ul className="services-list">
           {services.map((service) => (
             <li key={service.id} className="service-item">
-              <img
-                className="provider-avatar"
-                src={service.avatar}
-                alt={service.provider_name}
-              />
+              {service.avatar ? (
+                <img
+                  className="provider-avatar"
+                  src={service.avatar}
+                  alt={service.provider_name}
+                />
+              ) : (
+                <div className="provider-avatar provider-avatar-placeholder" aria-hidden="true">
+                  {service.provider_name?.charAt(0).toUpperCase() || 'P'}
+                </div>
+              )}
               <div className="service-info">
                 <span className="category-tag">{service.category_name}</span>
                 <h2 className="service-title">{service.title}</h2>
@@ -39,6 +45,13 @@ const ServiceDetails = ({ services = [] }) => {
                     {service.rating} ⭐ ({service.review_count} reviews)
                   </span>
                 </div>
+                <button
+                  className="book-service-button"
+                  type="button"
+                  onClick={() => onBookService(service)}
+                >
+                  Book this service
+                </button>
               </div>
             </li>
           ))}

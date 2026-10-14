@@ -2,7 +2,15 @@
 import { CiSearch } from "react-icons/ci";
 import "./navbar.css";
 
-const Navbar = ({ searchQuery = '', onSearchChange = () => {} }) => {
+const Navbar = ({
+    searchQuery = '',
+    onSearchChange = () => {},
+    user = null,
+    onSignIn = () => {},
+    onSignOut = () => {},
+    onShowBookings = () => {},
+    onRoleSelect = () => {},
+}) => {
     return (
         <div className="main-container-of-navbar">
             <header className="navbar">
@@ -39,6 +47,33 @@ const Navbar = ({ searchQuery = '', onSearchChange = () => {} }) => {
                     />
                 </div>
 
+                {/* Role Switcher */}
+                <div className="navbar-role">
+                    <button className={`role-btn${!user || user.role === 'customer' ? ' active' : ''}`} type="button" aria-pressed={!user || user.role === 'customer'} onClick={() => onRoleSelect('customer')}>
+                        Customer
+                    </button>
+
+                    <button className={`role-btn${user?.role === 'provider' ? ' active' : ''}`} type="button" aria-pressed={user?.role === 'provider'} onClick={() => onRoleSelect('provider')}>
+                        Provider
+                    </button>
+                </div>
+
+                {/* Actions */}
+                <div className="navbar-actions">
+                    <button className="bookings-btn" type="button" onClick={onShowBookings}>
+                        {user?.role === 'provider' ? 'My Services' : 'My Bookings'}
+                    </button>
+                </div>
+                <div className="sign-in-container">
+                    {user ? (
+                        <>
+                            <span className="navbar-user-name" title={user.email}>{user.name}</span>
+                            <button className="sign-in-btn" type="button" onClick={onSignOut}>Sign out</button>
+                        </>
+                    ) : (
+                        <button className="login-btn" type="button" onClick={() => onSignIn('customer')}>Sign in</button>
+                    )}
+                </div>
             </div>
             </header>
         </div>

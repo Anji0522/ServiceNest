@@ -1,0 +1,36 @@
+.panel-dialog { width: min(100%, 720px); }
+.booking-form { margin-bottom: 0; }
+.payment-notice { padding: 12px 14px; border-radius: 10px; background: var(--teal-tint); color: var(--teal-dark); font-size: .88rem; }
+.panel-section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; font-size: 1.05rem; }
+.provider-profile-summary { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--teal-tint); color: var(--teal-dark); font-size: .9rem; }
+.panel-section-title span { color: var(--teal); }
+.provider-service-form { margin-top: 12px; }
+.panel-error { margin-top: 10px; }
+.panel-empty { padding: 24px 8px; color: var(--ink-soft); }
+.record-list { display: grid; gap: 12px; margin-top: 16px; }
+.record-card { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.record-card p { color: var(--ink-soft); font-size: .9rem; overflow-wrap: anywhere; }
+.record-card-heading, .record-card-footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.record-card-heading h3 { font-size: 1rem; }
+.record-status { flex-shrink: 0; padding: 3px 9px; border-radius: 999px; background: var(--teal-tint); color: var(--teal-dark); font-size: .76rem; font-weight: 700; text-transform: capitalize; }
+.record-card-footer { align-items: center; padding-top: 8px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .85rem; }
+.record-card-footer strong { color: var(--ink); }
+.panel-footnote { margin-top: 18px; color: var(--ink-soft); font-size: .82rem; }
+.listing-chips { display: grid; gap: 8px; margin-top: 12px; }
+.listing-chips li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink-soft); }
+.message-action { justify-self: start; padding: 7px 12px; border: 1px solid var(--teal); border-radius: 9px; background: #fff; color: var(--teal-dark); font-weight: 650; }
+.message-action:hover { background: var(--teal-tint); }
+.conversation-overlay { z-index: 110; }
+.conversation-dialog { display: flex; flex-direction: column; gap: 12px; }
+.conversation-dialog h2 { padding-right: 32px; font-size: 1.2rem; }
+.conversation-messages { display: flex; min-height: 180px; max-height: min(48vh, 440px); flex-direction: column; gap: 10px; overflow-y: auto; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--page); }
+.conversation-message { align-self: flex-start; max-width: 85%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px 12px 12px 3px; background: white; overflow-wrap: anywhere; }
+.conversation-message.own-message { align-self: flex-end; border-color: #b8ded8; border-radius: 12px 12px 3px 12px; background: var(--teal-tint); }
+.conversation-sender { margin-bottom: 3px; color: var(--teal-dark); font-size: .78rem; font-weight: 750; }
+.conversation-message time { display: block; margin-top: 5px; color: var(--ink-soft); font-size: .72rem; }
+.conversation-form { display: flex; align-items: stretch; gap: 8px; }
+.conversation-form textarea { min-width: 0; flex: 1; padding: 10px 12px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; }
+.conversation-form .primary-action { min-width: 76px; }
+.conversation-error { margin: 0; }
+.conversation-poll-note { color: var(--ink-soft); font-size: .78rem; text-align: center; }
+@media (max-width: 520px) { .record-card-heading, .record-card-footer { flex-direction: column; } }

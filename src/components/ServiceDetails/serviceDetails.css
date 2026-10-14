@@ -13,6 +13,7 @@
 .service-item:nth-child(4) { animation-delay: .15s; }
 .service-item:hover { transform: translateY(-5px); border-color: #c8dedb; box-shadow: 0 18px 38px rgba(20,33,61,.1); }
 .provider-avatar { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; border: 3px solid var(--teal-tint); box-shadow: 0 3px 10px rgba(20,33,61,.1); }
+.provider-avatar-placeholder { display: grid; flex: 0 0 68px; place-items: center; background: var(--teal-tint); color: var(--teal-dark); font-size: 1.5rem; font-weight: 750; }
 .service-info { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .category-tag { align-self: flex-start; background: var(--teal-tint); color: var(--teal-dark); font-size: .8rem; font-weight: 650; padding: 4px 11px; border-radius: 999px; }
 .service-title { font-size: clamp(1.05rem, 2.4vw, 1.2rem); line-height: 1.35; letter-spacing: -.015em; overflow-wrap: anywhere; }
@@ -23,6 +24,8 @@
 .service-meta { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
 .price { font-weight: 700; color: var(--coral); }
 .rating { font-size: .9rem; color: var(--ink-soft); }
+.book-service-button { min-height: 42px; margin-top: 4px; border: 0; border-radius: 10px; background: var(--teal); color: #fff; font-weight: 700; transition: background .2s, transform .2s; }
+.book-service-button:hover { background: var(--teal-dark); transform: translateY(-1px); }
 
 /* Phones: avatar sits beside the text on wider phones, stacked on tiny ones */
 @media (min-width: 420px) and (max-width: 640px) {
