@@ -8,7 +8,7 @@ import Razorpay from 'razorpay';
 import { database, transaction } from './database.js';
 
 const port = Number(process.env.PORT || process.env.API_PORT || 3001);
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : randomBytes(32).toString('hex'));
 if (Buffer.byteLength(jwtSecret) < 32) {
   throw new Error('JWT_SECRET must contain at least 32 bytes.');
@@ -20,8 +20,9 @@ const razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 const razorpay = razorpayKeyId && razorpayKeySecret
   ? new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret })
   : null;
+const defaultCorsOrigins = 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:4174,http://127.0.0.1:4174,https://anji0522.github.io,https://servicenet.com,https://www.servicenet.com';
 const allowedOrigins = new Set(
-  (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:4174,http://127.0.0.1:4174')
+  (process.env.CORS_ORIGINS || defaultCorsOrigins)
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
