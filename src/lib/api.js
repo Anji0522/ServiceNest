@@ -7,16 +7,24 @@ export const hasSession = () => Boolean(localStorage.getItem(TOKEN_KEY));
 
 const request = async (path, options = {}) => {
   const token = localStorage.getItem(TOKEN_KEY);
-  const response = await fetch(`${API_ROOT}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+  let response;
+  try {
+    response = await fetch(`${API_ROOT}${path}`, {
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new Error('Cannot connect to the ServiceNest account service. Please try again later.', { cause: error });
+  }
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'The request could not be completed.');
+  if (!response.ok) {
+    throw new Error(payload.error || 'The request could not be completed. Please try again.');
+  }
   return payload;
 };
 

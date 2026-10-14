@@ -1,11 +1,18 @@
-import { createServer } from 'node:http';
 import { Buffer } from 'node:buffer';
 import { createHash, randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
 import process from 'node:process';
+import bcrypt from 'bcryptjs';
+import express from 'express';
+import jwt from 'jsonwebtoken';
 import { database, transaction } from './database.js';
 
 const port = Number(process.env.PORT || process.env.API_PORT || 3001);
 const host = process.env.HOST || '127.0.0.1';
+const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : randomBytes(32).toString('hex'));
+if (Buffer.byteLength(jwtSecret) < 32) {
+  throw new Error('JWT_SECRET must contain at least 32 bytes.');
+}
+const passwordHashRounds = 12;
 const allowedOrigins = new Set(
   (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173')
     .split(',')
@@ -34,6 +41,15 @@ const send = (response, status, data) => {
 };
 
 const readBody = (request) => new Promise((resolve, reject) => {
+  if (request.body !== undefined || request.readableEnded) {
+    const parsed = request.body === undefined ? {} : request.body;
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+      reject(new HttpError(400, 'Request body must be a JSON object.'));
+      return;
+    }
+    resolve(parsed);
+    return;
+  }
   let body = '';
   let tooLarge = false;
   request.on('data', (chunk) => {
@@ -73,20 +89,31 @@ const requiredString = (value, label, maxLength = 300) => {
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 const currentUser = (request) => {
-  const token = request.headers.authorization?.match(/^Bearer\s+([a-f\d]{64})$/i)?.[1];
+  const token = request.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
   if (!token) return null;
-  return database.prepare(`
-    SELECT u.id, u.email, u.role, u.name, u.phone, u.address, u.created_at
-    FROM sessions s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.token_hash = ? AND s.expires_at > ?
-  `).get(hashToken(token), new Date().toISOString()) || null;
+  try {
+    const claims = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
+    if (typeof claims === 'string' || !claims.sub) return null;
+    return database.prepare(`
+      SELECT u.id, u.email, u.role, u.name, u.phone, u.address, u.created_at
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.token_hash = ? AND s.user_id = ? AND s.expires_at > ?
+    `).get(hashToken(token), claims.sub, new Date().toISOString()) || null;
+  } catch {
+    return null;
+  }
 };
 
 const publicService = (service) => ({ ...service, verified: Boolean(service.verified) });
 
 const createSession = (user) => {
-  const token = randomBytes(32).toString('hex');
+  const token = jwt.sign({}, jwtSecret, {
+    algorithm: 'HS256',
+    subject: user.id,
+    jwtid: randomUUID(),
+    expiresIn: '30d',
+  });
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
   database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(createdAt.toISOString());
@@ -94,7 +121,112 @@ const createSession = (user) => {
     INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
     VALUES (?, ?, ?, ?)
   `).run(hashToken(token), user.id, createdAt.toISOString(), expiresAt.toISOString());
-  return { token, user: database.prepare('SELECT id, email, role, name, phone, address, created_at FROM users WHERE id = ?').get(user.id) };
+  const profile = database.prepare('SELECT id, email, role, name, phone, address, created_at FROM users WHERE id = ?').get(user.id);
+  if (profile.role === 'provider') {
+    profile.providerProfile = database.prepare(`
+      SELECT business_name, category_id, description, service_area, hourly_rate
+      FROM provider_profiles WHERE user_id = ?
+    `).get(user.id);
+  }
+  return { token, user: profile };
+};
+
+const handleRegistration = async (request, response) => {
+  const body = await readBody(request);
+  const name = requiredString(body.name, 'Name', 100);
+  const email = requiredString(body.email, 'Email', 254).toLowerCase();
+  const phone = requiredString(body.phone, 'Phone', 30).replace(/[\s().-]/g, '');
+  const password = requiredString(body.password, 'Password', 200);
+  const address = requiredString(body.address, 'Address', 500);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Enter a valid email address.');
+  if (!/^\+?[1-9]\d{7,14}$/.test(phone)) throw new HttpError(400, 'Enter a valid phone number with 8 to 15 digits.');
+  if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+    throw new HttpError(400, 'Password must contain 8 to 72 UTF-8 bytes.');
+  }
+  if (!['customer', 'provider'].includes(body.role)) throw new HttpError(400, 'Choose customer or provider account type.');
+  if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
+    throw new HttpError(409, 'An account with that email already exists.');
+  }
+  if (database.prepare('SELECT 1 FROM users WHERE phone = ?').get(phone)) {
+    throw new HttpError(409, 'An account with that phone number already exists.');
+  }
+
+  const id = randomUUID();
+  const passwordHash = await bcrypt.hash(password, passwordHashRounds);
+  const createAccount = () => transaction(() => {
+    if (database.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
+      throw new HttpError(409, 'An account with that email already exists.');
+    }
+    if (database.prepare('SELECT 1 FROM users WHERE phone = ?').get(phone)) {
+      throw new HttpError(409, 'An account with that phone number already exists.');
+    }
+    database.prepare(`
+      INSERT INTO users (id, email, password_hash, password_salt, role, name, phone, address, created_at)
+      VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)
+    `).run(id, email, passwordHash, body.role, name, phone, address, new Date().toISOString());
+    if (body.role === 'provider') {
+      const categoryId = Number(body.categoryId);
+      const categoryName = categories.get(categoryId);
+      const businessName = requiredString(body.businessName, 'Business name', 100);
+      const description = requiredString(body.description, 'Service description', 1000);
+      const serviceArea = requiredString(body.serviceArea, 'Service area', 200);
+      const hourlyRate = Number(body.hourlyRate);
+      if (!categoryName || !Number.isFinite(hourlyRate) || hourlyRate <= 0 || hourlyRate > 100000) {
+        throw new HttpError(400, 'Choose a valid service category and hourly rate.');
+      }
+      database.prepare(`
+        INSERT INTO provider_profiles (user_id, business_name, category_id, description, service_area, hourly_rate)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, businessName, categoryId, description, serviceArea, hourlyRate);
+      database.prepare(`
+        INSERT INTO services (provider_id, provider_name, category_id, category_name, title, description, price_per_hour, service_area, rating, review_count, avatar, verified)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', 0)
+      `).run(id, businessName, categoryId, categoryName, businessName, description, hourlyRate, serviceArea);
+    }
+  });
+  try {
+    createAccount();
+  } catch (error) {
+    if (error.errcode === 2067 || error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      if (error.message.includes('users.phone')) {
+        throw new HttpError(409, 'An account with that phone number already exists.');
+      }
+      if (error.message.includes('users.email')) {
+        throw new HttpError(409, 'An account with that email already exists.');
+      }
+      throw new HttpError(409, 'An account with that email or phone number already exists.');
+    }
+    throw error;
+  }
+  return send(response, 201, createSession({ id }));
+};
+
+const handleLogin = async (request, response) => {
+  const body = await readBody(request);
+  const email = requiredString(body.email, 'Email', 254).toLowerCase();
+  const password = requiredString(body.password, 'Password', 200);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Enter a valid email address.');
+  const user = database.prepare(`
+    SELECT id, email, role, password_hash, password_salt
+    FROM users WHERE email = ?
+  `).get(email);
+  if (!user) throw new HttpError(401, 'Email or password is incorrect.');
+
+  const isBcryptHash = /^\$2[aby]\$/.test(user.password_hash);
+  const passwordMatches = isBcryptHash
+    ? await bcrypt.compare(password, user.password_hash)
+    : (() => {
+      const submittedHash = scryptSync(password, user.password_salt, 64);
+      const savedHash = Buffer.from(user.password_hash, 'hex');
+      return submittedHash.length === savedHash.length && timingSafeEqual(submittedHash, savedHash);
+    })();
+  if (!passwordMatches) throw new HttpError(401, 'Email or password is incorrect.');
+  if (!isBcryptHash && Buffer.byteLength(password, 'utf8') <= 72) {
+    const passwordHash = await bcrypt.hash(password, passwordHashRounds);
+    database.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?')
+      .run(passwordHash, '', user.id);
+  }
+  return send(response, 200, createSession(user));
 };
 
 const handle = async (request, response) => {
@@ -114,81 +246,6 @@ const handle = async (request, response) => {
           .some((value) => value.toLowerCase().includes(search))))
       .map(publicService);
     return send(response, 200, { services });
-  }
-
-  if (request.method === 'POST' && pathname === '/api/auth/register') {
-    const body = await readBody(request);
-    const name = requiredString(body.name, 'Name', 100);
-    const email = requiredString(body.email, 'Email', 254).toLowerCase();
-    const phone = requiredString(body.phone, 'Phone', 30);
-    const password = requiredString(body.password, 'Password', 200);
-    const address = requiredString(body.address, 'Address', 500);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Enter a valid email address.');
-    if (password.length < 8) throw new HttpError(400, 'Password must contain at least 8 characters.');
-    if (!['customer', 'provider'].includes(body.role)) throw new HttpError(400, 'Choose customer or provider account type.');
-
-    const id = randomUUID();
-    const salt = randomBytes(16).toString('hex');
-    const passwordHash = scryptSync(password, salt, 64).toString('hex');
-    const createAccount = () => transaction(() => {
-      database.prepare(`
-        INSERT INTO users (id, email, password_hash, password_salt, role, name, phone, address, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, email, passwordHash, salt, body.role, name, phone, address, new Date().toISOString());
-      if (body.role === 'provider') {
-        const categoryId = Number(body.categoryId);
-        const categoryName = categories.get(categoryId);
-        const businessName = requiredString(body.businessName, 'Business name', 100);
-        const description = requiredString(body.description, 'Service description', 1000);
-        const serviceArea = requiredString(body.serviceArea, 'Service area', 200);
-        const hourlyRate = Number(body.hourlyRate);
-        if (!categoryName || !Number.isFinite(hourlyRate) || hourlyRate <= 0 || hourlyRate > 100000) {
-          throw new HttpError(400, 'Choose a valid service category and hourly rate.');
-        }
-        database.prepare(`
-          INSERT INTO provider_profiles (user_id, business_name, category_id, description, service_area, hourly_rate)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(id, businessName, categoryId, description, serviceArea, hourlyRate);
-        database.prepare(`
-          INSERT INTO services (provider_id, provider_name, category_id, category_name, title, description, price_per_hour, service_area, rating, review_count, avatar, verified)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', 0)
-        `).run(id, businessName, categoryId, categoryName, businessName, description, hourlyRate, serviceArea);
-      }
-    });
-    try {
-      createAccount();
-    } catch (error) {
-      if (error.errcode === 2067) {
-        return send(response, 409, { error: 'An account with that email already exists.' });
-      }
-      throw error;
-    }
-    return send(response, 201, createSession({ id }));
-  }
-
-  if (request.method === 'POST' && pathname === '/api/auth/login') {
-    const body = await readBody(request);
-    const email = requiredString(body.email, 'Email', 254).toLowerCase();
-    const password = requiredString(body.password, 'Password', 200);
-    const user = database.prepare('SELECT id, email, password_hash, password_salt FROM users WHERE email = ?').get(email);
-    if (!user) return send(response, 401, { error: 'Email or password is incorrect.' });
-    const submittedHash = scryptSync(password, user.password_salt, 64);
-    const savedHash = Buffer.from(user.password_hash, 'hex');
-    if (!timingSafeEqual(submittedHash, savedHash)) {
-      return send(response, 401, { error: 'Email or password is incorrect.' });
-    }
-    return send(response, 200, createSession(user));
-  }
-
-  if (request.method === 'POST' && pathname === '/api/auth/logout') {
-    const token = request.headers.authorization?.match(/^Bearer\s+([a-f\d]{64})$/i)?.[1];
-    if (token) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
-    return send(response, 200, { message: 'Signed out.' });
-  }
-
-  if (request.method === 'GET' && pathname === '/api/auth/me') {
-    const user = currentUser(request);
-    return user ? send(response, 200, { user }) : send(response, 401, { error: 'Please sign in again.' });
   }
 
   if (request.method === 'GET' && pathname === '/api/provider/profile') {
@@ -354,7 +411,29 @@ const handle = async (request, response) => {
   return send(response, 404, { error: 'API endpoint not found.' });
 };
 
-const server = createServer((request, response) => {
+const sendError = (error, request, response) => {
+  const status = error instanceof HttpError
+    ? error.status
+    : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
+      ? error.status
+      : 500;
+  const message = error instanceof HttpError
+    ? error.message
+    : error.type === 'entity.parse.failed'
+      ? 'Request body must be valid JSON.'
+      : status === 413
+        ? 'Request body is too large.'
+        : 'The server could not complete the request.';
+  if (status >= 500) console.error(`${request.method} ${request.url}:`, error);
+  send(response, status, { error: message });
+};
+
+const asyncHandler = (handler) => (request, response) => {
+  Promise.resolve(handler(request, response)).catch((error) => sendError(error, request, response));
+};
+
+const app = express();
+app.use((request, response, next) => {
   const origin = request.headers.origin;
   if (origin && !allowedOrigins.has(origin)) {
     return send(response, 403, { error: 'This website is not allowed to access the API.' });
@@ -369,15 +448,27 @@ const server = createServer((request, response) => {
     response.writeHead(204);
     return response.end();
   }
-  handle(request, response).catch((error) => {
-    console.error(`${request.method} ${request.url}:`, error);
-    send(response, error instanceof HttpError ? error.status : 500, {
-      error: error instanceof HttpError ? error.message : 'The server could not complete the request.',
-    });
-  });
+  return next();
+});
+app.use(express.json({ limit: '1mb' }));
+app.post('/api/auth/register', asyncHandler(handleRegistration));
+app.post('/api/auth/login', asyncHandler(handleLogin));
+app.post('/api/auth/logout', (request, response) => {
+  const token = request.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  if (token) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
+  return send(response, 200, { message: 'Signed out.' });
+});
+app.get('/api/auth/me', (request, response) => {
+  const user = currentUser(request);
+  return user ? send(response, 200, { user }) : send(response, 401, { error: 'Please sign in again.' });
+});
+app.use(asyncHandler(handle));
+app.use((error, request, response, next) => {
+  if (response.headersSent) return next(error);
+  return sendError(error, request, response);
 });
 
-server.listen(port, host, () => {
+const server = app.listen(port, host, () => {
   console.log(`ServiceNest API listening on port ${port}`);
 });
 

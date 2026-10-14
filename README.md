@@ -26,7 +26,7 @@ The API creates `data/servicenest.sqlite` on first start and seeds the catalogue
 
 ## Included features
 
-- Customer and provider account registration and sign-in. Passwords are salted and hashed with Node's `scrypt`; hashed browser sessions are stored in the database and remain valid for 30 days, including across server restarts.
+- Customer and provider account registration and sign-in via Express. Registration validates email and international phone numbers, prevents duplicate emails and phone numbers, and returns clear `400`, `401`, `409`, and `500` JSON errors. Passwords are hashed with bcrypt; signed HS256 JWTs are stored as hashes in the database so they can be revoked and remain valid for 30 days, including across server restarts. Existing scrypt password hashes are upgraded to bcrypt on sign-in when the password fits bcrypt's 72-byte limit.
 - Customer contact and service address details, provider profiles, service listings, catalogue search, category filtering, and sorting.
 - Customer bookings with appointment time, service address, notes, duration, and an itemized hourly total.
 - Persistent payment records for cash after service. Online/card payments are intentionally not enabled; connect a payment processor before accepting electronic payment details.
@@ -43,6 +43,8 @@ The API creates `data/servicenest.sqlite` on first start and seeds the catalogue
 
 Authenticated requests use a bearer token. For production, configure HTTPS, request rate limiting, database backups, and an approved payment provider; do not expose the development server directly to the internet.
 
+Registration accepts `name`, `email`, `password`, `role` (`customer` or `provider`), `phone`, and `address`. Provider registrations also require `businessName`, `categoryId`, `description`, `serviceArea`, and `hourlyRate`. The API returns the signed JWT and a profile without password fields. Set a private `JWT_SECRET` of at least 32 bytes in production; the Render Blueprint generates one automatically.
+
 ## Deploy the API with persistent storage
 
 1. Sign in to Render and create a new **Blueprint** from this GitHub repository. Render reads `render.yaml` to create the API service and attach a persistent disk at `/var/data`. The Starter web service and disk are paid Render resources; the disk preserves customer accounts, provider profiles, listings, bookings, payments, and messages across restarts and deployments.
@@ -51,7 +53,7 @@ Authenticated requests use a bearer token. For production, configure HTTPS, requ
 
 The local API allows local development origins; the Render Blueprint restricts the deployed API to the GitHub Pages and ServiceNest custom domains. Set `CORS_ORIGINS` on Render to a comma-separated list of exact trusted origins if the frontend is served from another domain. Do not put credentials or API secrets in `VITE_API_URL` or other `VITE_` variables; frontend build variables are public.
 
-The API stores customer contact details and service addresses, plus booking and conversation records. Passwords are stored as salted hashes; payment card or bank data is not collected. Restrict access to the Render project and disk, use HTTPS, and establish appropriate privacy, retention, and backup practices before collecting real customer data.
+The API stores customer contact details and service addresses, plus booking and conversation records. Passwords are bcrypt-hashed; payment card or bank data is not collected. Restrict access to the Render project and disk, use HTTPS, and establish appropriate privacy, retention, and backup practices before collecting real customer data.
 
 ## Custom-domain DNS
 

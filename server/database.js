@@ -96,6 +96,7 @@ database.exec(`
     ON booking_messages (booking_id, created_at);
 `);
 
+database.exec('CREATE INDEX IF NOT EXISTS users_phone_lookup ON users(phone)');
 database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
 
 const seedServices = [

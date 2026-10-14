@@ -64,12 +64,13 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
           {mode === 'login' ? 'Sign in to manage your services and bookings.' : 'Join the local home-services network.'}
         </p>
         {mode === 'register' && (
-          <div className="account-role-picker" aria-label="Account type">
+          <div className="account-role-picker" role="group" aria-label="Account type">
             {['customer', 'provider'].map((accountRole) => (
               <button
                 key={accountRole}
                 type="button"
                 className={role === accountRole ? 'selected' : ''}
+                aria-pressed={role === accountRole}
                 onClick={() => setRole(accountRole)}
               >
                 {accountRole === 'customer' ? 'I need a service' : 'I offer services'}
@@ -133,7 +134,7 @@ const Login = ({ initialRole = 'customer', onClose, onAuthenticated }) => {
               type="password"
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               minLength="8"
-              maxLength="200"
+              maxLength={mode === 'register' ? 72 : 200}
               required
             />
           </label>
